@@ -35,17 +35,16 @@ This project is a car plate information management system built using Python and
 
 3. Install the required packages:
     ```sh
-    pip install -r requirements.txt
+    pip install .
+    ```
+    or
+    ```sh
+    pip install -r requirement.txt
     ```
 
 ## Usage
 
-1. Initialize the database:
-    ```sh
-    python db/initialize_db.py
-    ```
-
-2. Run the application:
+1. Run the application (it will automatically initialize the database if needed):
     ```sh
     python start.py
     ```
@@ -73,16 +72,25 @@ The executable will be created in the dist directory.
 
 ## Project Structure
 
-- app: Contains the main application code.
+- core: Contains the main application logic and core components.
+  - `__init__.py`: Makes the directory a package.
+  - `application.py`: Main application class.
+  - `logger.py`: Configures logging for the application.
+- ui: Contains UI components and handlers.
   - `__init__.py`: Makes the directory a package.
   - `add_plate_dialog.py`: Dialog for adding car plate information.
-  - `logger.py`: Configures logging for the application.
   - `main_ui.py`: Main UI setup for the application.
   - `table_view_handler.py`: Handles the table view operations.
-- db: Contains database-related scripts.
+- database: Contains database-related scripts.
   - `__init__.py`: Makes the directory a package.
   - `database.py`: Database operations.
   - `initialize_db.py`: Script to initialize the database.
+- utils: Contains utility functions and helpers.
+  - `__init__.py`: Makes the directory a package.
+  - `helpers.py`: Utility functions.
+- config: Contains configuration files and constants.
+  - `__init__.py`: Makes the directory a package.
+  - `constants.py`: Application constants.
 - `designer/`: Contains UI design files.
   - `add.ui`: UI design for adding car plate information.
   - `new_again.ui`: Main window UI design.

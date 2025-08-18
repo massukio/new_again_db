@@ -1,13 +1,15 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
-from app.logger import logger
-from db.database import plate_exists, plate_and_phone_exists, add_plate_info, plate_and_phone_note_exists
+from core.logger import logger
+from database.database import plate_exists, plate_and_phone_exists, add_plate_info, plate_and_phone_note_exists, plate_exists_excluding_original, get_connection
+from config.constants import DATABASE_FILE
 import sqlite3
 
 class AddPlateDialog(QtWidgets.QDialog):
-    def __init__(self, parent=None, plate_type='add'):
+    def __init__(self, parent=None, plate_type='add', original_values=None):
         super(AddPlateDialog, self).__init__(parent)
         self.plate_type = plate_type
-        self.setWindowTitle("新增車牌資料")
+        self.original_values = original_values if original_values else ("", "", "", "")
+        self.setWindowTitle("新增車牌資料" if plate_type == 'add' else "修改車牌資料")
         self.resize(801, 267)
 
         self.main_layout = QtWidgets.QVBoxLayout(self)
@@ -172,16 +174,50 @@ class AddPlateDialog(QtWidgets.QDialog):
                 self.done(QtWidgets.QDialog.Accepted)
 
         else:  # plate_type == 'edit'
-            if plate_and_phone_note_exists(plate_info[0], plate_info[1], plate_info[2], plate_info[3]):
-                error_dialog = QtWidgets.QMessageBox()
-                error_dialog.setIcon(QtWidgets.QMessageBox.Critical)
-                error_dialog.setWindowTitle("錯誤")
-                error_dialog.setText("此車牌號碼、電話號碼與相同備註已經存在。")
-                error_dialog.addButton("確定", QtWidgets.QMessageBox.AcceptRole)
-                error_dialog.exec_()
-            else:
-                add_plate_info(plate_info[0], plate_info[1], plate_info[2], plate_info[3])
-                self.done(QtWidgets.QDialog.Accepted)
+            # For edit mode, we check if the new values are different from the original
+            # and if the new combination already exists
+            new_part1, new_part2, new_phone, new_note = plate_info
+            orig_part1, orig_part2, orig_phone, orig_note = self.original_values
+            
+            # Check if the new plate number already exists (excluding the original record)
+            if (new_part1.upper(), new_part2.upper()) != (orig_part1.upper(), orig_part2.upper()):
+                if plate_exists_excluding_original(new_part1, new_part2, orig_part1, orig_part2):
+                    error_dialog = QtWidgets.QMessageBox()
+                    error_dialog.setIcon(QtWidgets.QMessageBox.Critical)
+                    error_dialog.setWindowTitle("錯誤")
+                    error_dialog.setText("此車牌號碼已經存在，無法更新。")
+                    error_dialog.addButton("確定", QtWidgets.QMessageBox.AcceptRole)
+                    error_dialog.exec_()
+                    return
+            
+            # Check if the new combination already exists (and it's not the same as original)
+            if (new_part1.upper(), new_part2.upper(), new_phone, new_note) != (orig_part1.upper(), orig_part2.upper(), orig_phone, orig_note):
+                if plate_and_phone_note_exists(new_part1, new_part2, new_phone, new_note):
+                    # If the exact same combination exists, check if it's a different record
+                    # by querying the database directly and excluding the original record
+                    conn = get_connection()
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        SELECT COUNT(*)
+                        FROM plate_info
+                        WHERE part1 = ? AND part2 = ? AND phone_number = ? AND note = ? 
+                        AND NOT (part1 = ? AND part2 = ? AND phone_number = ? AND note = ?)
+                    ''', (new_part1.upper(), new_part2.upper(), new_phone, new_note,
+                          orig_part1.upper(), orig_part2.upper(), orig_phone, orig_note))
+                    count = cursor.fetchone()[0]
+                    conn.close()
+                    
+                    if count > 0:
+                        error_dialog = QtWidgets.QMessageBox()
+                        error_dialog.setIcon(QtWidgets.QMessageBox.Critical)
+                        error_dialog.setWindowTitle("錯誤")
+                        error_dialog.setText("此車牌號碼、電話號碼與相同備註已經存在。")
+                        error_dialog.addButton("確定", QtWidgets.QMessageBox.AcceptRole)
+                        error_dialog.exec_()
+                        return
+            
+            # For edit mode, we just accept and let the main application handle the update
+            self.done(QtWidgets.QDialog.Accepted)
 
     def reject(self) -> None:
         """Handle the reject event."""

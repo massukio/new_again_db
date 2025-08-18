@@ -1,8 +1,4 @@
-import os
 from PyQt5 import QtCore, QtGui, QtWidgets
-from app.table_view_handler import TableViewHandler
-from app.add_plate_dialog import AddPlateDialog
-from db.database import delete_plate_info, update_plate_info
 
 class UiMainWindow(object):
     def setup_ui(self, main_window):
@@ -182,9 +178,6 @@ class UiMainWindow(object):
 
         self.plate_line_edit.returnPressed.connect(self.focus_plate_line_edit2)
 
-        self.set_background_color()
-        self.apply_modern_style()
-
     def retranslate_ui(self, main_window):
         _translate = QtCore.QCoreApplication.translate
         main_window.setWindowTitle(_translate("MainWindow", "再新洗車資料庫"))
@@ -209,25 +202,13 @@ class UiMainWindow(object):
         sender.setText(text.upper())
         sender.blockSignals(False)
 
-    def confirm_delete_selected_row(self):
-        selected_row = self.table_view.currentRow()
-        if (selected_row >= 0):
-            plate_info = self.table_view.item(selected_row, 0).text()
-            reply = QtWidgets.QMessageBox.question(
-                None, '確認刪除', f"確定要刪除車牌號碼 {plate_info} 嗎？",
-                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No
-            )
-            if (reply == QtWidgets.QMessageBox.Yes):
-                self.table_handler.delete_selected_row()
+    def update_line_edits(self):
+        # This method will be implemented in the main application class
+        pass
 
     def reset_table_view(self):
-        self.plate_line_edit.clear()
-        self.plate_line_edit2.clear()
-        self.search_combo_box.setCurrentIndex(0)
-        self.table_handler.load_data()
-        for row in range(self.table_view.rowCount()):
-            self.table_view.setRowHidden(row, False)
-        self.plate_line_edit.setFocus()
+        # This method will be implemented in the main application class
+        pass
 
     def show_about_dialog(self):
         about_text = (
@@ -240,64 +221,6 @@ class UiMainWindow(object):
         )
         QtWidgets.QMessageBox.about(None, "About", about_text)
 
-    def set_background_color(self):
-        gradient = QtGui.QLinearGradient(0, 0, 0, self.central_widget.height())
-        gradient.setColorAt(0.0, QtGui.QColor(173, 216, 230))  # Light Blue
-        gradient.setsColorAt(1.0, QtGui.QColor(135, 206, 250))  # Light Sky Blue
-        palette = QtGui.QPalette()
-        palette.setBrush(QtGui.QPalette.Window, QtGui.QBrush(gradient))
-        self.central_widget.setPalette(palette)
-
-    def apply_modern_style(self):
-        base_font_size = 18  # Default base font size
-        style_sheet = f"""
-        QWidget {{
-            font-family: 'Microsoft YaHei', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            font-size: {base_font_size}px;
-            color: #333;
-        }}
-        QMainWindow {{
-            background-color: #f0f0f0;
-        }}
-        QPushButton {{
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            text-align: center;
-            text-decoration: none;
-            font-size: {base_font_size}px;
-            margin: 4px 2px;
-            border-radius: 8px;
-        }}
-        QPushButton:hover {{
-            background-color: #45a049;
-        }}
-        QLineEdit {{
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: {base_font_size+7}px;
-        }}
-        QTableWidget {{
-            background-color: #ffffff;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: {base_font_size+5}px;
-        }}
-        QHeaderView::section {{
-            background-color: #f0f0f0;
-            padding: 4px;
-            border: 1px solid #ddd;
-            font-size: {base_font_size}px;
-        }}
-        """
-        self.central_widget.setStyleSheet(style_sheet)
-        self.adjust_font_size()
-
-    def resizeEvent(self, event):
-        self.adjust_font_size()
-        super(UiMainWindow, self).resizeEvent(event)
-
     def focus_plate_line_edit2(self):
-        self.plate_line_edit2.setFocus()
+        # This method will be implemented in the main application class
+        pass

@@ -1,7 +1,8 @@
 import sqlite3
+from config.constants import DATABASE_FILE
 
 def initialize_database():
-    conn = sqlite3.connect('database.db')
+    conn = sqlite3.connect(DATABASE_FILE)
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS plate_info (
