@@ -123,7 +123,7 @@ class MainWindow(QtWidgets.QMainWindow, UiMainWindow):
         self.table_view.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
 
     def show_add_plate_dialog(self):
-        dialog = AddPlateDialog(self, 'add')
+        dialog = AddPlateDialog(self, 'add', font_size=self.table_font_size)
         while dialog.exec_() == QtWidgets.QDialog.Accepted:
             plate_info = dialog.get_plate_info()
             logger.debug(f"Adding plate info: {plate_info}")
@@ -135,7 +135,7 @@ class MainWindow(QtWidgets.QMainWindow, UiMainWindow):
             )
             logger.info(f"新增車牌號碼: {plate_info}")
             self.table_handler.load_data()
-            dialog = AddPlateDialog(self, 'add')
+            dialog = AddPlateDialog(self, 'add', font_size=self.table_font_size)
 
     def confirm_delete_selected_row(self):
         selected_row = self.table_view.currentRow()
@@ -190,7 +190,7 @@ class MainWindow(QtWidgets.QMainWindow, UiMainWindow):
             note = self.table_view.item(selected_row, 2).text()
             part1, part2 = plate_info.split('-')
 
-            dialog = AddPlateDialog(self, 'edit', (part1, part2, phone_number, note))
+            dialog = AddPlateDialog(self, 'edit', (part1, part2, phone_number, note), font_size=self.table_font_size)
             dialog.plate_part1_line_edit.setText(part1)
             dialog.plate_part2_line_edit.setText(part2)
             dialog.phone_number_line_edit.setText(phone_number)

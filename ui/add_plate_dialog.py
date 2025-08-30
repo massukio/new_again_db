@@ -5,10 +5,11 @@ from config.constants import DATABASE_FILE
 import sqlite3
 
 class AddPlateDialog(QtWidgets.QDialog):
-    def __init__(self, parent=None, plate_type='add', original_values=None):
+    def __init__(self, parent=None, plate_type='add', original_values=None, font_size=25):
         super(AddPlateDialog, self).__init__(parent)
         self.plate_type = plate_type
         self.original_values = original_values if original_values else ("", "", "", "")
+        self.font_size = font_size
         self.setWindowTitle("新增車牌資料" if plate_type == 'add' else "修改車牌資料")
         self.resize(801, 267)
 
@@ -21,7 +22,7 @@ class AddPlateDialog(QtWidgets.QDialog):
 
         self.plate_part1_line_edit = QtWidgets.QLineEdit(self.grid_layout_widget)
         font = QtGui.QFont()
-        font.setPointSize(25)
+        font.setPointSize(self.font_size)
         font.setBold(True)
         font.setWeight(75)
         self.plate_part1_line_edit.setFont(font)
@@ -33,7 +34,7 @@ class AddPlateDialog(QtWidgets.QDialog):
 
         self.label = QtWidgets.QLabel(self.grid_layout_widget)
         font = QtGui.QFont()
-        font.setPointSize(20)
+        font.setPointSize(self.font_size)  # Same size as input fields
         font.setBold(True)
         font.setWeight(75)
         self.label.setFont(font)
@@ -43,7 +44,7 @@ class AddPlateDialog(QtWidgets.QDialog):
 
         self.plate_part2_line_edit = QtWidgets.QLineEdit(self.grid_layout_widget)
         font = QtGui.QFont()
-        font.setPointSize(25)
+        font.setPointSize(self.font_size)
         font.setBold(True)
         font.setWeight(75)
         self.plate_part2_line_edit.setFont(font)
@@ -60,7 +61,7 @@ class AddPlateDialog(QtWidgets.QDialog):
 
         self.phone_number_line_edit = QtWidgets.QLineEdit(self.grid_layout_widget_2)
         font = QtGui.QFont()
-        font.setPointSize(25)
+        font.setPointSize(self.font_size)
         font.setBold(True)
         font.setWeight(75)
         self.phone_number_line_edit.setFont(font)
@@ -72,7 +73,7 @@ class AddPlateDialog(QtWidgets.QDialog):
 
         self.label_2 = QtWidgets.QLabel(self.grid_layout_widget_2)
         font = QtGui.QFont()
-        font.setPointSize(20)
+        font.setPointSize(self.font_size)  # Same size as input fields
         font.setBold(True)
         font.setWeight(75)
         self.label_2.setFont(font)
@@ -87,7 +88,7 @@ class AddPlateDialog(QtWidgets.QDialog):
 
         self.note_line_edit = QtWidgets.QLineEdit(self.grid_layout_widget_3)
         font = QtGui.QFont()
-        font.setPointSize(25)
+        font.setPointSize(self.font_size)
         font.setBold(True)
         font.setWeight(75)
         self.note_line_edit.setFont(font)
@@ -97,7 +98,7 @@ class AddPlateDialog(QtWidgets.QDialog):
 
         self.label_3 = QtWidgets.QLabel(self.grid_layout_widget_3)
         font = QtGui.QFont()
-        font.setPointSize(20)
+        font.setPointSize(self.font_size)  # Same size as input fields
         font.setBold(True)
         font.setWeight(75)
         self.label_3.setFont(font)
@@ -121,14 +122,36 @@ class AddPlateDialog(QtWidgets.QDialog):
         super(AddPlateDialog, self).resizeEvent(event)
 
     def adjust_font_size(self):
-        base_font_size = 30
-        font_size = max(base_font_size, int(self.height() * 0.03))
-        font = QtGui.QFont()
-        font.setPointSize(font_size)
-        self.plate_part1_line_edit.setFont(font)
-        self.plate_part2_line_edit.setFont(font)
-        self.phone_number_line_edit.setFont(font)
-        self.note_line_edit.setFont(font)
+        # Font for input fields - use exact size passed
+        input_font = QtGui.QFont()
+        input_font.setPointSize(self.font_size)
+        input_font.setBold(True)
+        input_font.setWeight(75)
+        
+        # Update input fields
+        self.plate_part1_line_edit.setFont(input_font)
+        self.plate_part2_line_edit.setFont(input_font)
+        self.phone_number_line_edit.setFont(input_font)
+        self.note_line_edit.setFont(input_font)
+        
+        # Font for labels (60% of input field size)
+        label_font = QtGui.QFont()
+        label_font.setPointSize(int(self.font_size * 0.4))  # Make labels even smaller
+        label_font.setBold(True)
+        label_font.setWeight(75)
+        
+        # Update labels
+        self.label.setFont(label_font)
+        self.label_2.setFont(label_font)
+        self.label_3.setFont(label_font)
+        
+        # Also update stylesheet to ensure no conflicts
+        style_sheet = """
+        QLabel {
+            padding: 2px;
+        }
+        """
+        self.setStyleSheet(style_sheet)
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
         """Handle key press events."""
@@ -235,7 +258,6 @@ class AddPlateDialog(QtWidgets.QDialog):
         sender.blockSignals(False)
 
     def apply_modern_style(self):
-        base_font_size = 18  # Default base font size
         style_sheet = f"""
         QDialog {{
             background-color: #f0f0f0;
@@ -246,10 +268,8 @@ class AddPlateDialog(QtWidgets.QDialog):
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
-            font-size: {self.parent().input_font_size}px;
         }}
         QLabel {{
-            font-size: {base_font_size}px;
             color: #333;
         }}
         QPushButton {{
