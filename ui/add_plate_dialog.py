@@ -1,7 +1,8 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
 from core.logger import logger
-from database.database import plate_exists, plate_and_phone_exists, add_plate_info, plate_and_phone_note_exists, plate_exists_excluding_original, get_connection
+from database.database import plate_exists, plate_and_phone_exists, add_plate_info, plate_and_phone_note_exists, plate_exists_excluding_original, get_connection, filter_plate_info
 from config.constants import DATABASE_FILE
+from utils.helpers import format_phone_number
 import sqlite3
 
 class AddPlateDialog(QtWidgets.QDialog):
@@ -30,6 +31,7 @@ class AddPlateDialog(QtWidgets.QDialog):
         self.plate_part1_line_edit.setAlignment(QtCore.Qt.AlignCenter)
         self.plate_part1_line_edit.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.plate_part1_line_edit.textChanged.connect(self.convert_to_upper)
+        self.plate_part1_line_edit.textChanged.connect(self.search_plate)
         self.grid_layout.addWidget(self.plate_part1_line_edit, 1, 0, 1, 1)
 
         self.label = QtWidgets.QLabel(self.grid_layout_widget)
@@ -52,6 +54,7 @@ class AddPlateDialog(QtWidgets.QDialog):
         self.plate_part2_line_edit.setAlignment(QtCore.Qt.AlignCenter)
         self.plate_part2_line_edit.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.plate_part2_line_edit.textChanged.connect(self.convert_to_upper)
+        self.plate_part2_line_edit.textChanged.connect(self.search_plate)
         self.grid_layout.addWidget(self.plate_part2_line_edit, 1, 1, 1, 1)
 
         self.grid_layout_widget_2 = QtWidgets.QWidget(self)
@@ -113,6 +116,15 @@ class AddPlateDialog(QtWidgets.QDialog):
         self.button_box.button(QtWidgets.QDialogButtonBox.Cancel).setText("取消")
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
+
+        self.results_table = QtWidgets.QTableWidget(self)
+        self.results_table.setColumnCount(3)
+        self.results_table.setHorizontalHeaderLabels(["車牌號碼", "電話號碼", "備註"])
+        self.results_table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+        self.results_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.results_table.setVisible(False)  # Initially hidden
+        self.main_layout.addWidget(self.results_table)
+
         self.main_layout.addWidget(self.button_box)
 
         self.apply_modern_style()
@@ -155,7 +167,9 @@ class AddPlateDialog(QtWidgets.QDialog):
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
         """Handle key press events."""
-        if event.key() in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
+        if event.key() == QtCore.Qt.Key_Escape:
+            self.clear_inputs()
+        elif event.key() in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
             focus_widget = self.focusWidget()
             if focus_widget == self.phone_number_line_edit:
                 self.note_line_edit.setFocus()
@@ -165,6 +179,32 @@ class AddPlateDialog(QtWidgets.QDialog):
                 self.focusNextChild()
         else:
             super(AddPlateDialog, self).keyPressEvent(event)
+
+    def search_plate(self):
+        """Search for plates based on the input and update the results table."""
+        part1 = self.plate_part1_line_edit.text()
+        part2 = self.plate_part2_line_edit.text()
+
+        if not part1 and not part2:
+            self.results_table.setVisible(False)
+            self.results_table.setRowCount(0)
+            return
+
+        # We pass "車牌查詢" as search_mode to filter_plate_info
+        results = filter_plate_info(part1, part2, "", "車牌查詢")
+
+        if results:
+            self.results_table.setVisible(True)
+            self.results_table.setRowCount(len(results))
+            for row, (plate, phone_number, note) in enumerate(results):
+                formatted_phone_number = format_phone_number(phone_number)
+                self.results_table.setItem(row, 0, QtWidgets.QTableWidgetItem(plate))
+                self.results_table.setItem(row, 1, QtWidgets.QTableWidgetItem(formatted_phone_number))
+                self.results_table.setItem(row, 2, QtWidgets.QTableWidgetItem(note))
+            self.results_table.resizeRowsToContents()
+        else:
+            self.results_table.setVisible(False)
+            self.results_table.setRowCount(0)
 
     def accept(self) -> None:
         """Handle the accept event."""
@@ -179,6 +219,7 @@ class AddPlateDialog(QtWidgets.QDialog):
                 error_dialog.setText("此車牌號碼和電話號碼已存在。")
                 error_dialog.addButton("確定", QtWidgets.QMessageBox.AcceptRole)
                 error_dialog.exec_()
+                return
             elif plate_exists(plate_info[0], plate_info[1]):
                 warning_dialog = QtWidgets.QMessageBox()
                 warning_dialog.setIcon(QtWidgets.QMessageBox.Warning)
@@ -191,7 +232,8 @@ class AddPlateDialog(QtWidgets.QDialog):
                     add_plate_info(plate_info[0], plate_info[1], plate_info[2], plate_info[3])
                     self.done(QtWidgets.QDialog.Accepted)
                 else:
-                    self.done(QtWidgets.QDialog.Rejected)
+                    self.clear_inputs()
+                    self.plate_part1_line_edit.setFocus()
             else:
                 add_plate_info(plate_info[0], plate_info[1], plate_info[2], plate_info[3])
                 self.done(QtWidgets.QDialog.Accepted)
@@ -249,6 +291,15 @@ class AddPlateDialog(QtWidgets.QDialog):
     def get_plate_info(self) -> tuple:
         """Get the plate info from the input fields."""
         return self.plate_part1_line_edit.text(), self.plate_part2_line_edit.text(), self.phone_number_line_edit.text(), self.note_line_edit.text()
+
+    def clear_inputs(self):
+        """Clear all input fields."""
+        self.plate_part1_line_edit.clear()
+        self.plate_part2_line_edit.clear()
+        self.phone_number_line_edit.clear()
+        self.note_line_edit.clear()
+        self.results_table.setRowCount(0)
+        self.results_table.setVisible(False)
 
     def convert_to_upper(self, text: str) -> None:
         """Convert the input text to uppercase."""
