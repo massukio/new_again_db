@@ -32,6 +32,7 @@ class MainWindow(QtWidgets.QMainWindow, UiMainWindow):
         self.initialize_table_handler()
         self.set_background_color()
         self.action_adjust_font_size.triggered.connect(self.show_font_size_dialog)
+        self.plate_line_edit.returnPressed.connect(self.focus_plate_line_edit2)
 
     def pre_check_database(self):
         if not os.path.exists(DATABASE_FILE):
@@ -105,6 +106,9 @@ class MainWindow(QtWidgets.QMainWindow, UiMainWindow):
             self.reset_table_view()
         else:
             super(MainWindow, self).keyPressEvent(event)
+
+    def focus_plate_line_edit2(self):
+        self.plate_line_edit2.setFocus()
 
     def reset_table_view(self):
         # Store current column widths and row heights
