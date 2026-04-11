@@ -6,3 +6,5 @@ __pycache__/
 designer/
 dist/
 build/
+logs/
+.pytest_cache/

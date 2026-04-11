@@ -1,1 +1,0 @@
-# New Again DB - A car plate information management system

@@ -2,26 +2,40 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Run Python File",
+            "label": "Run App",
             "type": "shell",
-            "command": "${command:python.interpreterPath}",
-            "args": [
-                "${file}"
-            ],
+            "command": "python3 start.py",
+            "windows": {
+                "command": "python start.py"
+            },
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
             "problemMatcher": [],
-            "detail": "Run the current Python file",
-            "presentation": {
-                "panel": "new"
+            "detail": "Launch the app (auto-runs setup if needed)"
+        },
+        {
+            "label": "Build Standalone",
+            "type": "shell",
+            "command": "uv run pyinstaller new_again_db.spec",
+            "windows": {
+                "command": "uv run pyinstaller new_again_db.spec"
             },
-            "options": {
-                "env": {
-                    "PYTHONPATH": "${workspaceFolder}/.venv/bin/python"
-                }
-            }
+            "group": "build",
+            "problemMatcher": [],
+            "detail": "Build standalone executable via PyInstaller (output in dist/)"
+        },
+        {
+            "label": "Run Tests",
+            "type": "shell",
+            "command": "uv run pytest tests/ -v",
+            "windows": {
+                "command": "uv run pytest tests/ -v"
+            },
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Run all pytest tests"
         }
     ]
 }

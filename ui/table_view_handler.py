@@ -1,6 +1,12 @@
-from PyQt5 import QtCore, QtWidgets
-from database.database import get_all_plate_info, delete_plate_info, filter_plate_info
+from datetime import datetime
+from PyQt5 import QtWidgets, QtGui
+from database.database import (
+    get_all_plate_info, get_all_plates_with_stats,
+    delete_plate_info, filter_plate_info
+)
 from utils.helpers import format_phone_number
+from config.constants import MIN_COLUMN_WIDTH
+
 
 class TableViewHandler:
     def __init__(self, table_view, plate_line_edit, plate_line_edit2, search_combo_box):
@@ -11,99 +17,90 @@ class TableViewHandler:
         self.plate_line_edit.textChanged.connect(self.filter_table)
         self.plate_line_edit2.textChanged.connect(self.filter_table)
         self.search_combo_box.currentIndexChanged.connect(self.filter_table)
-        self.table_view.verticalHeader().setVisible(False)  # Hide row numbers
         self.load_data()
 
     def load_data(self):
-        """Load data and resize rows to fit content (initial load only)."""
-        data = get_all_plate_info()
-        self._populate_table(data)
-        self.table_view.resizeRowsToContents()  # Only for initial load
-        self._set_minimum_column_widths()
+        """Load all data with stats into the table."""
+        rows = get_all_plates_with_stats()
+        self._populate_table_with_stats(rows)
+        self.table_view.resizeRowsToContents()
+        self._ensure_min_column_widths()
 
-    def load_data_preserve_formatting(self, column_widths=None, row_heights=None):
-        """Load data while preserving table formatting."""
-        # Store current formatting if not provided
-        if column_widths is None:
-            column_widths = [self.table_view.columnWidth(i) for i in range(self.table_view.columnCount())]
-        if row_heights is None:
-            row_heights = [self.table_view.rowHeight(i) for i in range(self.table_view.rowCount())]
-        
-        data = get_all_plate_info()
-        self._populate_table(data)
-        
-        # Restore formatting - column widths first
-        for i, width in enumerate(column_widths):
-            if i < self.table_view.columnCount():
-                self.table_view.setColumnWidth(i, width)
-        
-        # Then restore row heights (this is the key!)
-        for i, height in enumerate(row_heights):
-            if i < self.table_view.rowCount():
-                self.table_view.setRowHeight(i, height)
-        
-        self._set_minimum_column_widths()
+    def _populate_table_with_stats(self, rows):
+        self.table_view.setRowCount(len(rows))
+        today = datetime.now().date()
+        for row_idx, (part1, part2, phone, note, brand, vip, last_visit) in enumerate(rows):
+            plate_text = f"{part1}-{part2}"
+            if vip:
+                plate_text = f"★ {plate_text}"
 
-    def _set_minimum_column_widths(self):
-        for column in range(self.table_view.columnCount()):
-            current_width = self.table_view.columnWidth(column)
-            if current_width < 150:
-                self.table_view.setColumnWidth(column, 150)  # Set minimum width to 150
+            self.table_view.setItem(row_idx, 0, QtWidgets.QTableWidgetItem(plate_text))
+            self.table_view.setItem(row_idx, 1, QtWidgets.QTableWidgetItem(format_phone_number(phone)))
+            note_item = QtWidgets.QTableWidgetItem(note)
+            note_item.setToolTip(f"<span style='font-size: 14pt;'>{note}</span>")
+            self.table_view.setItem(row_idx, 2, note_item)
+
+            # Last visit column
+            if last_visit:
+                last_date = datetime.strptime(last_visit, '%Y-%m-%d').date()
+                days = (today - last_date).days
+                if days == 0:
+                    visit_text = "今天"
+                elif days == 1:
+                    visit_text = "昨天"
+                else:
+                    visit_text = f"{days}天前"
+                visit_item = QtWidgets.QTableWidgetItem(visit_text)
+                if days >= 30:
+                    visit_item.setForeground(QtGui.QColor("#DC2626"))
+                elif days == 0:
+                    visit_item.setForeground(QtGui.QColor("#059669"))
+            else:
+                visit_item = QtWidgets.QTableWidgetItem("無紀錄")
+                visit_item.setForeground(QtGui.QColor("#9CA3AF"))
+            self.table_view.setItem(row_idx, 3, visit_item)
 
     def _populate_table(self, data):
+        """Populate from filter results (no stats join)."""
         self.table_view.setRowCount(len(data))
-        for row, (plate, phone_number, note) in enumerate(data):
-            formatted_phone_number = format_phone_number(phone_number)
+        for row, (plate, phone_number, note, brand) in enumerate(data):
             self.table_view.setItem(row, 0, QtWidgets.QTableWidgetItem(plate))
-            self.table_view.setItem(row, 1, QtWidgets.QTableWidgetItem(formatted_phone_number))
+            self.table_view.setItem(row, 1, QtWidgets.QTableWidgetItem(format_phone_number(phone_number)))
             note_item = QtWidgets.QTableWidgetItem(note)
-            note_item.setToolTip(f"<span style='font-size: 14pt;'>{note}</span>")  # Add tooltip with larger font
+            note_item.setToolTip(f"<span style='font-size: 14pt;'>{note}</span>")
             self.table_view.setItem(row, 2, note_item)
+            self.table_view.setItem(row, 3, QtWidgets.QTableWidgetItem(""))
 
-    def _populate_table_and_resize(self, data):
-        """Populate table and resize rows to contents."""
-        self._populate_table(data)
-        self.table_view.resizeRowsToContents()  # Ensure rows are resized to fit content
+    def _ensure_min_column_widths(self):
+        for col in range(self.table_view.columnCount()):
+            if self.table_view.columnWidth(col) < MIN_COLUMN_WIDTH:
+                self.table_view.setColumnWidth(col, MIN_COLUMN_WIDTH)
 
     def filter_table(self):
-        # Store current formatting
-        column_widths = [self.table_view.columnWidth(i) for i in range(self.table_view.columnCount())]
-        row_heights = [self.table_view.rowHeight(i) for i in range(self.table_view.rowCount())]
-        
-        part1_filter_text = phone_filter_text = \
-            self.plate_line_edit.text().lower()
-        part2_filter_text = self.plate_line_edit2.text().lower()
+        text1 = self.plate_line_edit.text().lower()
+        text2 = self.plate_line_edit2.text().lower()
         search_mode = self.search_combo_box.currentText()
         if search_mode == "電話查詢":
-            data = filter_plate_info("", "", phone_filter_text, search_mode)
+            data = filter_plate_info("", "", text1, search_mode)
         else:
-            data = filter_plate_info(part1_filter_text, part2_filter_text, "", search_mode)
+            data = filter_plate_info(text1, text2, "", search_mode)
         self._populate_table(data)
-        
-        # Restore formatting
-        for i, width in enumerate(column_widths):
-            if i < self.table_view.columnCount():
-                self.table_view.setColumnWidth(i, width)
-        for i, height in enumerate(row_heights):
-            if i < self.table_view.rowCount():
-                self.table_view.setRowHeight(i, height)
-        
-        self._set_minimum_column_widths()
+        self.table_view.resizeRowsToContents()
+        self._ensure_min_column_widths()
 
-    def update_row(self, row, plate, phone_number, note):
-        formatted_phone_number = format_phone_number(phone_number)
+    def update_row(self, row, plate, phone_number, note, brand=""):
         self.table_view.setItem(row, 0, QtWidgets.QTableWidgetItem(plate))
-        self.table_view.setItem(row, 1, QtWidgets.QTableWidgetItem(formatted_phone_number))
+        self.table_view.setItem(row, 1, QtWidgets.QTableWidgetItem(format_phone_number(phone_number)))
         note_item = QtWidgets.QTableWidgetItem(note)
-        note_item.setToolTip(f"<span style='font-size: 14pt;'>{note}</span>")  # Update tooltip with larger font
+        note_item.setToolTip(f"<span style='font-size: 14pt;'>{note}</span>")
         self.table_view.setItem(row, 2, note_item)
 
     def delete_selected_row(self):
         selected_row = self.table_view.currentRow()
         if selected_row >= 0:
-            plate_info = self.table_view.item(selected_row, 0).text()
-            phone_number_item = self.table_view.item(selected_row, 1)
-            phone_number = phone_number_item.text().replace('-', '') if phone_number_item else ""
-            part1, part2 = plate_info.split('-')
-            delete_plate_info(part1, part2, phone_number)
+            plate = self.table_view.item(selected_row, 0).text().replace("★ ", "")
+            phone_item = self.table_view.item(selected_row, 1)
+            phone = phone_item.text().replace('-', '') if phone_item else ""
+            part1, part2 = plate.split('-')
+            delete_plate_info(part1, part2, phone)
             self.table_view.removeRow(selected_row)

@@ -2,21 +2,16 @@
 
 import os
 
-# Get the project root directory (current working directory)
 project_root = os.getcwd()
 
-# Collect all Python files and modules
 datas = [
-    # Include all Python modules
     (os.path.join(project_root, 'core'), 'core'),
     (os.path.join(project_root, 'ui'), 'ui'),
     (os.path.join(project_root, 'database'), 'database'),
     (os.path.join(project_root, 'utils'), 'utils'),
     (os.path.join(project_root, 'config'), 'config'),
+    (os.path.join(project_root, 'assets'), 'assets'),
 ]
-
-# Add any additional data files if needed
-# datas += [(os.path.join(project_root, 'designer'), 'designer')]
 
 a = Analysis(
     ['start.py'],
@@ -31,6 +26,11 @@ a = Analysis(
         'ui.main_ui',
         'ui.add_plate_dialog',
         'ui.table_view_handler',
+        'ui.styles',
+        'ui.font_size_dialog',
+        'ui.wash_record_dialog',
+        'ui.earnings_page',
+        'ui.customer_dashboard',
         'database',
         'database.database',
         'database.initialize_db',
@@ -38,6 +38,8 @@ a = Analysis(
         'utils.helpers',
         'config',
         'config.constants',
+        'config.config_manager',
+        'config.brands',
     ],
     hookspath=[],
     hooksconfig={},
