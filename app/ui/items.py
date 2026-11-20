@@ -62,9 +62,8 @@ class ItemManager(QtWidgets.QWidget):
         self.list = QtWidgets.QListWidget()
         sized(self.list, "setMinimumHeight", 300)
         sized(self.list, "setMinimumWidth", 260)
-        sized(self.list, "setMaximumWidth", 500)
         self.list.itemDoubleClicked.connect(lambda _i: self._rename())
-        row.addWidget(self.list)
+        row.addWidget(self.list, 1)  # take the room: long item names must not be cut off
         btns = QtWidgets.QVBoxLayout()
         for text, role, slot in [("＋ 新增項目", None, self._add), ("改名", None, self._rename),
                                  ("往上移", None, lambda: self._move(-1)),
@@ -75,7 +74,6 @@ class ItemManager(QtWidgets.QWidget):
             btns.addWidget(b)
         btns.addStretch(1)
         row.addLayout(btns)
-        row.addStretch(1)
         lay.addLayout(row)
         self.refresh()
 

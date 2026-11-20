@@ -469,6 +469,8 @@ class CustomersPage(QtWidgets.QWidget):
         key = (self.mode, self.part1.text(), self.part2.text(), self.phone.text(), self.db.conn.total_changes)
         if not force and key == getattr(self, "_loaded_key", None):
             return
+        if key[-1] != getattr(self, "_loaded_key", (None,))[-1]:
+            self.charge.reload_items(keep_selection=True)  # items may have been edited in 設定
         self._loaded_key = key
         if select_id is None:
             select_id = self.selected_id(quiet=True)

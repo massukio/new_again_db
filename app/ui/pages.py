@@ -7,6 +7,7 @@ from PyQt5.QtCore import QDate, pyqtSignal
 
 from app import backup, config
 from app.db import Database, DataError
+from app.ui.items import ItemManager
 from app.ui.style import sized
 from app.ui.widgets import (Card, Segmented, Tile, ask, button, fill_table, fmt_date, fmt_money, info,
                             label, make_table, warn)
@@ -316,7 +317,12 @@ class SettingsPage(Page):
         fs.addStretch(1)
         font_card.add(fs)
         left = QtWidgets.QVBoxLayout()
+        sized(left, "setSpacing", 16)
         left.addWidget(font_card)
+        items_card = Card("服務項目")  # same items as the chips in 記錄消費
+        self.items = ItemManager(db)
+        items_card.add(self.items)
+        left.addWidget(items_card)
         left.addStretch(1)
         cols.addLayout(left, 3)
 
@@ -342,6 +348,7 @@ class SettingsPage(Page):
 
     def refresh(self):
         self.font_seg.set_current(self.font_size_name())
+        self.items.refresh()
 
     def font_size_name(self) -> str:
         name = self.db.get_setting("font_size")

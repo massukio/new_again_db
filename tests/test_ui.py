@@ -267,3 +267,16 @@ def test_selected_chip_keeps_its_size(env, qapp):
     chip.click()
     qapp.processEvents()
     assert chip.isChecked() and chip.text() == before_text and chip.sizeHint().width() == before_w
+
+
+def test_items_managed_in_settings_show_in_the_panel(env, qapp, monkeypatch):
+    from app.ui import items
+    win, page, db, _ = env
+    monkeypatch.setattr(items, "ask_text", lambda *a, **k: "引擎室清潔")
+    monkeypatch.setattr(items, "info", lambda *a, **k: None)
+    win.show_page(3)                                   # 設定
+    names = [win.settings_page.items.list.item(i).text() for i in range(win.settings_page.items.list.count())]
+    assert names[0] == "泡沫外表洗車" and len(names) == 17
+    win.settings_page.items._add()
+    win.show_page(0)                                   # back to 客戶資料
+    assert "引擎室清潔" in [b.property("item_name") for b in page.charge.items.buttons]

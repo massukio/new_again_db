@@ -16,7 +16,7 @@ app/ui/customers.py    CustomersPage (main: list, header actions, search), Charg
                        (add/edit), CustomerInfoDialog, BrandGrid, FlowLayout/ChipFlow, Toast
 app/ui/items.py        service item flows (add / rename / delete / reorder) + manager dialog
                        (same file shape as autorepair_db's items.py)
-app/ui/pages.py        ReportPage, BackupPage, SettingsPage
+app/ui/pages.py        ReportPage, BackupPage, SettingsPage (字體大小, 服務項目 ItemManager, 關於)
 app/ui/widgets.py      shared widgets (Card, Tile, Segmented, fill_table, messages ...) -
                        same file as in autorepair_db
 app/ui/style.py        palette (teal accent), stylesheet, sized() scaling registry
