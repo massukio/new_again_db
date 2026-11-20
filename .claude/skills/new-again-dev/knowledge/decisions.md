@@ -29,3 +29,5 @@
   price list, NO prices or car sizes ("不需要價格，只要項目就好"); amount is typed.
 - 2026-11-20 — No VIP feature (★ mark, 設為 VIP) — "不用這種功能". The vip column stays in
   the database only so old app versions keep working; nothing reads or writes it.
+- 2026-11-20 — Restore must consume any backup that follows one of our schemas,
+  whatever the file name. All files the app creates have Chinese names.

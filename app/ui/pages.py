@@ -271,7 +271,7 @@ class BackupPage(Page):
     def _restore(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "選擇要還原的備份檔", self.db.get_setting("last_manual_backup_dir") or documents_dir(),
-            "備份檔 (*.db *.sql);;所有檔案 (*.*)")
+            "所有檔案 (*)")  # content decides, not the name: old backups may be called anything
         if not path:
             return
         try:

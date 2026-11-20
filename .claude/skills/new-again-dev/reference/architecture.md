@@ -55,12 +55,28 @@ idx_wash_day   (wash_date, amount, plate_part1, plate_part2)   covering: reports
 
 ## Compatibility (why the schema did not change)
 
-Old versions: original (plate_info only), 1.1 (+brand), 1.1+ (+vip, wash_records).
-`_create_schema` upgrades any of them in place (ADD COLUMN, CREATE IF NOT
-EXISTS). Because tables are unchanged, a 2.0 backup still opens in old apps.
-Old backups: `.db` copies and `.sql` text dumps (`iterdump`). `.sql` is loaded
-into a temp database with an authorizer that denies ATTACH/DETACH/
-load_extension, validated (plate_info with part1/part2/phone_number), then copied.
+Every old version and its backup format — real backup files of each, made by the
+old code itself, live in `tests/fixtures/legacy/` (regenerate with
+`tools/make_legacy_backups.py <clone with history>`), tested by
+`tests/test_legacy_backups.py`:
+
+| Version | plate_info | wash_records | backups |
+| --- | --- | --- | --- |
+| 2025-03-02 first (`fa742e1`) | no `note`, UNIQUE(part1, part2) | – | copy of database.db* |
+| 2025-03-02 (`5f1c239`) | + note, UNIQUE(part1, part2) | – | copy of database.db* |
+| 2025-08 main (`18177f9`) | UNIQUE(part1, part2, phone_number) | – | .db copy or .sql dump |
+| 2026-04 v1.1 (`21ad8ae`) | + brand, vip | yes | .db copy or .sql dump |
+
+\* the very first commits offered a ".json" backup that copied a file the app never
+wrote - no real JSON backup can exist, so JSON is not supported.
+
+`_create_schema` upgrades any of them in place: ADD COLUMN note/brand/vip, and if
+the table still has UNIQUE(part1, part2) it is rebuilt (`_rebuild_plate_info`, one
+transaction, ids kept) so a plate can have several phones. Tables are otherwise
+unchanged, so a 2.0 backup still opens in v1.x apps. Restore decides by CONTENT,
+never by file name or extension (the picker shows all files): SQLite header →
+database; text with CREATE TABLE plate_info → old `.sql` dump, loaded into a temp
+database with ATTACH/DETACH/load_extension denied, validated, then copied.
 
 ## Files and names
 

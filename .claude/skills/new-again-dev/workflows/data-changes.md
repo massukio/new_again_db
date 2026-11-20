@@ -7,7 +7,8 @@
    `SCHEMA_VERSION`. `executescript` commits first — put `BEGIN;` inside scripts
    that must be atomic.
 3. Never delete a database file. Rename in place; move a db with its `-journal`.
-4. Restore must accept: `.db` from any version, `.sql` dumps (load with the
+4. Every change must keep `tests/test_legacy_backups.py` green (real backups from
+   every old version). Restore must accept: `.db` from any version, `.sql` dumps (load with the
    authorizer in `_open_backup_source`), and reject anything without
    `plate_info(part1, part2, phone_number)`. Test each with a hand-built old file.
 5. Writes touching several rows: `with self.conn:`.

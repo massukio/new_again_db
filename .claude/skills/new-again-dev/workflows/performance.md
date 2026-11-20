@@ -30,3 +30,6 @@ Rules:
 - Smaller tables (客戶資訊, reports) may use `fill_table`; style rows only inside
   `fill_table(decorate=...)`. `tests/test_perf.py` guards the 3,000-row list.
 - Search debounce 120 ms.
+- The list loads at most `CustomersPage.MAX_ROWS` (3,000) rows; beyond that the
+  header says 「只顯示前 3,000 筆…請輸入車牌或電話查詢」 (count via SQL). With the
+  816,917-row fake 2025-03 database restored: list 37 ms, search 62–97 ms.

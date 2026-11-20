@@ -280,3 +280,13 @@ def test_items_managed_in_settings_show_in_the_panel(env, qapp, monkeypatch):
     win.settings_page.items._add()
     win.show_page(0)                                   # back to 客戶資料
     assert "引擎室清潔" in [b.property("item_name") for b in page.charge.items.buttons]
+
+
+def test_huge_list_is_capped(env, qapp, monkeypatch):
+    win, page, db, _ = env
+    monkeypatch.setattr(type(page), "MAX_ROWS", 1)
+    page.refresh()
+    assert page.table.rowCount() == 1 and "只顯示前 1 筆" in page.count_label.text()
+    page.part1.setText("XYZ")
+    page.refresh()
+    assert page.table.rowCount() == 1 and page.count_label.text().startswith("找到 1 筆")

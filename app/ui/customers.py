@@ -352,6 +352,7 @@ class Toast(QtWidgets.QLabel):
 # ===================================================================== page
 class CustomersPage(QtWidgets.QWidget):
     data_changed = pyqtSignal()
+    MAX_ROWS = 3000  # rows loaded at most; beyond that the owner narrows with the search
 
     def __init__(self, db: Database, parent=None):
         super().__init__(parent)
@@ -475,9 +476,11 @@ class CustomersPage(QtWidgets.QWidget):
         if select_id is None:
             select_id = self.selected_id(quiet=True)
         if self.mode == "plate":
-            rows = self.db.list_customers(part1=self.part1.text(), part2=self.part2.text())
+            flt = dict(part1=self.part1.text(), part2=self.part2.text())
         else:
-            rows = self.db.list_customers(phone=self.phone.text())
+            flt = dict(phone=self.phone.text())
+        rows = self.db.list_customers(limit=self.MAX_ROWS, **flt)
+        matching = len(rows) if len(rows) < self.MAX_ROWS else self.db.count_customers_matching(**flt)
         self.rows = rows
         if auto_pick and len(rows) == 1 and self._searching():
             select_id = rows[0]["id"]  # a search that finds one car selects it: ready to charge
@@ -493,8 +496,13 @@ class CustomersPage(QtWidgets.QWidget):
         self.table.blockSignals(False)
         self._selection_changed()
         total = self.db.count_customers()
-        self.count_label.setText(f"共 {len(rows):,} 筆" if len(rows) == total
-                                 else f"找到 {len(rows):,} 筆（共 {total:,} 筆）")
+        if matching > len(rows):  # huge list (e.g. a big old backup): never load it all
+            self.count_label.setText(f"只顯示前 {len(rows):,} 筆（{'找到' if self._searching() else '共'} {matching:,} 筆），"
+                                     f"請輸入車牌或電話查詢")
+        elif len(rows) == total:
+            self.count_label.setText(f"共 {len(rows):,} 筆")
+        else:
+            self.count_label.setText(f"找到 {len(rows):,} 筆（共 {total:,} 筆）")
 
     def _selection_changed(self):
         cid = self.selected_id(quiet=True)

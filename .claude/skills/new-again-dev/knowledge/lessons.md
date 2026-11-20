@@ -63,3 +63,13 @@ Format: `## YYYY-MM-DD — title` then What happened / Cause / Rule.
 ## 2026-11-20 — Selected chips must not change size
 - A ✓ prefix and bold on selected chips made them wider, so wrapped chips jumped
   to another line. Rule: show selection by colour only (both apps).
+
+## 2026-11-20 — "Restores old backups" must be proven with REAL old backups
+- What happened: tests used hand-written old schemas and missed the two very first
+  versions (no note column; one phone per plate). Restoring them would have failed.
+- Rule: generate fixtures by running each old version's own code from git
+  (`tools/make_legacy_backups.py`), test restore under any file name, and test
+  the upgraded data is fully usable (second phone, wash, edit).
+- Early commits (fa742e1, 5f1c239) shipped a database.db with fake data
+  (816,919 / 100,002 rows): never reuse a committed database as a fixture; it was
+  useful locally as a stress test and exposed the need for `MAX_ROWS`.

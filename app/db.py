@@ -16,8 +16,10 @@ services     : selectable service items (name, order, active). New in 2.0;
                deleting only hides. A wash stores the chosen names in its note
                ('泡沫外表洗車、皮椅內裝保養 - 備註'), the same format old versions used.
 
-Old layouts handled by ``_create_schema``: original (plate_info without brand /
-vip, no wash_records), 1.1 (brand), 1.1+ (vip, wash_records).
+Old layouts handled by ``_create_schema`` (real backups of each are in
+tests/fixtures/legacy): 2025-03 first (no note, UNIQUE(part1, part2)), 2025-03
+(+note), 2025-08 main (UNIQUE(part1, part2, phone_number)), 2026-04 v1.1 (+brand,
+vip, wash_records). Backups: .db copies and .sql dumps (any file name).
 
 Performance: covering indexes
   idx_wash_plate (plate_part1, plate_part2, wash_date, amount) - a customer's
@@ -72,6 +74,45 @@ def _tables(conn) -> set:
     return {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 
 
+def _unique_on_plate_only(conn) -> bool:
+    """2025-03 versions allowed one phone per plate: UNIQUE(part1, part2)."""
+    for idx in conn.execute("PRAGMA index_list(plate_info)").fetchall():
+        if idx[2]:  # unique
+            cols = [r[2] for r in conn.execute(f"PRAGMA index_info('{idx[1]}')")]
+            if cols == ["part1", "part2"]:
+                return True
+    return False
+
+
+def _rebuild_plate_info(conn) -> None:
+    """Rebuild plate_info with the current rule UNIQUE(part1, part2, phone_number),
+    keeping every row and id. One transaction: all or nothing."""
+    conn.commit()
+    try:
+        conn.executescript("""
+            BEGIN;
+            CREATE TABLE plate_info_v2 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                part1 TEXT NOT NULL,
+                part2 TEXT NOT NULL,
+                phone_number TEXT NOT NULL,
+                note TEXT,
+                brand TEXT DEFAULT '',
+                vip INTEGER DEFAULT 0,
+                UNIQUE(part1, part2, phone_number)
+            );
+            INSERT INTO plate_info_v2(id, part1, part2, phone_number, note, brand, vip)
+                SELECT id, part1, part2, phone_number, note, COALESCE(brand, ''), COALESCE(vip, 0) FROM plate_info;
+            DROP TABLE plate_info;
+            ALTER TABLE plate_info_v2 RENAME TO plate_info;
+        """)
+        conn.commit()
+    except sqlite3.Error:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
+        raise
+
+
 def _create_schema(conn: sqlite3.Connection) -> None:
     """Create or upgrade the schema in place. Runs on open and after every restore."""
     conn.executescript("""
@@ -106,10 +147,14 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         );
     """)
     cols = _columns(conn, "plate_info")
+    if "note" not in cols:  # the very first version (2025-03) had no note
+        conn.execute("ALTER TABLE plate_info ADD COLUMN note TEXT")
     if "brand" not in cols:
         conn.execute("ALTER TABLE plate_info ADD COLUMN brand TEXT DEFAULT ''")
     if "vip" not in cols:
         conn.execute("ALTER TABLE plate_info ADD COLUMN vip INTEGER DEFAULT 0")
+    if _unique_on_plate_only(conn):
+        _rebuild_plate_info(conn)
     if conn.execute("SELECT value FROM settings WHERE key='services_seeded'").fetchone() is None:
         from app.config import DEFAULT_SERVICES
         if not conn.execute("SELECT 1 FROM services LIMIT 1").fetchone():
@@ -176,9 +221,9 @@ class Database:
                               "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
 
     # ----------------------------------------------------------------- customers
-    def list_customers(self, part1: str = "", part2: str = "", phone: str = "") -> List[dict]:
-        """All customers, or filtered by plate halves (contains) or by phone (contains)."""
-        sql, args = _CUSTOMER_SELECT + " WHERE 1=1", []
+    @staticmethod
+    def _customer_where(part1: str, part2: str, phone: str):
+        sql, args = " WHERE 1=1", []
         p1, p2, ph = clean_part(part1), clean_part(part2), clean_phone(phone)
         if p1:
             sql += " AND p.part1 LIKE ?"
@@ -189,8 +234,22 @@ class Database:
         if ph:
             sql += " AND " + PHONE_DIGITS.replace("phone_number", "p.phone_number") + " LIKE ?"
             args.append(f"%{ph}%")
-        sql += " ORDER BY p.part1, p.part2, p.id DESC"  # a plate's newest phone number first
+        return sql, args
+
+    def list_customers(self, part1: str = "", part2: str = "", phone: str = "",
+                       limit: Optional[int] = None) -> List[dict]:
+        """All customers, or filtered by plate halves (contains) or by phone (contains).
+        limit caps the rows loaded (the list shows a hint to search instead)."""
+        where, args = self._customer_where(part1, part2, phone)
+        sql = _CUSTOMER_SELECT + where + " ORDER BY p.part1, p.part2, p.id DESC"  # newest phone first
+        if limit is not None:
+            sql += " LIMIT ?"
+            args.append(int(limit))
         return [_customer(r) for r in self.conn.execute(sql, args)]
+
+    def count_customers_matching(self, part1: str = "", part2: str = "", phone: str = "") -> int:
+        where, args = self._customer_where(part1, part2, phone)
+        return self.conn.execute("SELECT COUNT(*) FROM plate_info p" + where, args).fetchone()[0]
 
     def plate_phones(self, part1: str, part2: str) -> List[dict]:
         """All phone rows of one plate, newest first (a car can have several numbers)."""
