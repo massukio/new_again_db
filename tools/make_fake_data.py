@@ -14,10 +14,15 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.brands import BRANDS  # noqa: E402
-from app.config import WASH_TYPES  # noqa: E402
+from app.config import DEFAULT_SERVICES  # noqa: E402
 from app.db import Database, DataError  # noqa: E402
 
-PRICES = {"一般洗車": (200, 400), "精緻洗車": (500, 900), "美容": (1200, 3500), "其他": (100, 600)}
+# (service, weight, price range) - mostly washes, sometimes extras / coatings
+MENU = [("泡沫外表洗車", 60, (300, 500)), ("基礎洗車打腊（全套）", 20, (750, 1000)),
+        ("深層美容式精緻洗車", 6, (1700, 2000)), ("皮椅內裝保養", 5, (300, 350)),
+        ("柏油處理", 3, (500, 500)), ("鋼圈鍍膜", 2, (2000, 2000)), ("頂級美容", 2, (7000, 10000)),
+        ("晶鑽鍍膜", 1, (13000, 23000)), ("其他", 1, (100, 600))]
+assert all(m[0] in DEFAULT_SERVICES for m in MENU)
 NOTES = ["老客戶", "要打蠟", "內裝要吸", "公司車"] + [""] * 36  # notes are rare in real shops
 
 
@@ -53,10 +58,13 @@ def main():
             continue
         d = today - dt.timedelta(days=rng.randint(0, every))
         while d >= today - dt.timedelta(days=args.days):
-            t = rng.choices(WASH_TYPES, weights=[70, 20, 6, 4])[0]
-            lo, hi = PRICES[t]
-            db.add_wash(p1, p2, rng.randint(lo // 50, hi // 50) * 50, d.isoformat(),
-                        t if rng.random() < 0.8 else f"{t} - {rng.choice(['打蠟', '內裝清潔', '鍍膜'])}")
+            name, _w, (lo, hi) = rng.choices(MENU, weights=[m[1] for m in MENU])[0]
+            amount = rng.randint(lo // 50, hi // 50) * 50
+            note = name
+            if rng.random() < 0.15:  # sometimes two services in one visit
+                extra = rng.choice(MENU[3:6])
+                note, amount = f"{name}、{extra[0]}", amount + extra[2][0]
+            db.add_wash(p1, p2, amount, d.isoformat(), note)
             n += 1
             d -= dt.timedelta(days=max(1, every + rng.randint(-3, 5)))
     print(f"added {len(cars)} customers, {n} wash records")

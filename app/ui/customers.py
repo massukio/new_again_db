@@ -5,7 +5,9 @@ the old app - keep it:
 - search under the list: 車牌查詢 (前半 — 後半) or 電話查詢, filters while typing
 - Enter moves to the next box; ESC clears the search and puts the cursor back
 - 新增資料 keeps the dialog open after saving so several cars can be entered
-- 記錄消費 / 客戶資訊 work on the selected row (double-click = 客戶資訊)
+- 記錄消費 happens in the right-hand panel for the selected row: tap service
+  items, type the amount, 儲存消費 (a search that finds one car selects it)
+- 客戶資訊 works on the selected row (double-click = 客戶資訊)
 - routine actions confirm with a short fading message, not a popup
 - no money on this screen (only in 營收報表 and 客戶資訊)
 """
@@ -20,6 +22,7 @@ from app import config
 from app.brands import BRANDS, brand_logo
 from app.db import Database, DataError, format_phone
 from app.ui.style import px, sized
+from app.ui.items import ItemManagerDialog, add_item_flow, delete_item_flow, rename_item_flow
 from app.ui.widgets import (Card, Segmented, Tile, ask, button, divider, fill_table, fit_to_screen,
                             fmt_date, fmt_money, label, make_table, warn)
 
@@ -67,30 +70,140 @@ def phone_edit(placeholder: str = "電話號碼") -> QtWidgets.QLineEdit:
     return e
 
 
-class SideColumn(QtWidgets.QScrollArea):
-    """Vertical-only scroll area that is always exactly as wide as its content
-    (so nothing is clipped at any font size); scrolls only on very short windows."""
+class FlowLayout(QtWidgets.QLayout):
+    """Lays widgets out left-to-right and wraps to the next line, like words."""
 
-    def __init__(self, inner: QtWidgets.QWidget):
-        super().__init__()
-        self.setWidgetResizable(True)
-        self.setFrameShape(QtWidgets.QFrame.NoFrame)
-        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
-        self.setWidget(inner)
-        inner.installEventFilter(self)
+    def __init__(self, parent=None, spacing: int = 8):
+        super().__init__(parent)
+        self._items = []
+        self._spacing = spacing
+        self.setContentsMargins(0, 0, 0, 0)
+
+    def addItem(self, item):
+        self._items.append(item)
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, i):
+        return self._items[i] if 0 <= i < len(self._items) else None
+
+    def takeAt(self, i):
+        return self._items.pop(i) if 0 <= i < len(self._items) else None
+
+    def expandingDirections(self):
+        return QtCore.Qt.Orientations(0)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._do_layout(QtCore.QRect(0, 0, width, 0), apply=False)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._do_layout(rect, apply=True)
 
     def sizeHint(self):
-        w = self.widget().minimumSizeHint().width() + self.verticalScrollBar().sizeHint().width()
-        return QtCore.QSize(max(w, px(220)), super().sizeHint().height())
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QtCore.QSize()
+        for it in self._items:
+            size = size.expandedTo(it.minimumSize())
+        return size
+
+    def _do_layout(self, rect, apply):
+        x, y, line_h = rect.x(), rect.y(), 0
+        sp = px(self._spacing)
+        for it in self._items:
+            hint = it.sizeHint()
+            if x + hint.width() > rect.right() + 1 and line_h > 0:
+                x, y, line_h = rect.x(), y + line_h + sp, 0
+            if apply:
+                it.setGeometry(QtCore.QRect(QtCore.QPoint(x, y), hint))
+            x += hint.width() + sp
+            line_h = max(line_h, hint.height())
+        return y + line_h - rect.y()
+
+
+class ChipFlow(QtWidgets.QWidget):
+    """Service item chips, each as wide as its name, wrapping like words.
+    Same API as ItemGrid (set_items / selected_ids / set_selected / clear, right-click
+    rename / delete) so the item flows are shared."""
+
+    rename_requested = pyqtSignal(int, str)
+    delete_requested = pyqtSignal(int, str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.flow = FlowLayout(self)
+        self.buttons = []
+        sp = self.sizePolicy()
+        sp.setHeightForWidth(True)
+        self.setSizePolicy(sp)
+
+    def set_items(self, items, keep_selection: bool = True):
+        selected = set(self.selected_ids()) if keep_selection else set()
+        for b in self.buttons:
+            self.flow.removeWidget(b)
+            b.hide()
+            b.setParent(None)
+            b.deleteLater()
+        self.buttons = []
+        for it in items:
+            b = button(it["name"], "chip")
+            b.setCheckable(True)
+            b.setProperty("item_id", it["id"])
+            b.setProperty("item_name", it["name"])
+            b.toggled.connect(lambda on, btn=b: btn.setText(("✓ " if on else "") + btn.property("item_name")))
+            b.setChecked(it["id"] in selected)
+            b.setToolTip("按右鍵可以改名或刪除")
+            b.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+            b.customContextMenuRequested.connect(lambda pos, btn=b: self._menu(btn, pos))
+            self.flow.addWidget(b)
+            self.buttons.append(b)
+        self.updateGeometry()
+
+    def _menu(self, btn, pos):
+        iid, name = btn.property("item_id"), btn.property("item_name")
+        menu = QtWidgets.QMenu(self)
+        menu.addAction(f"修改「{name}」的名稱", lambda: self.rename_requested.emit(iid, name))
+        menu.addAction(f"刪除「{name}」", lambda: self.delete_requested.emit(iid, name))
+        menu.exec_(btn.mapToGlobal(pos))
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self.flow.heightForWidth(width)
+
+    def sizeHint(self):
+        w = self.width() if self.width() > 50 else px(300)
+        return QtCore.QSize(px(300), self.heightForWidth(w))
 
     def minimumSizeHint(self):
-        return QtCore.QSize(self.sizeHint().width(), 0)
+        return QtCore.QSize(px(120), self.heightForWidth(self.width() if self.width() > 50 else px(300)))
 
-    def eventFilter(self, obj, event):
-        if event.type() in (QtCore.QEvent.LayoutRequest, QtCore.QEvent.StyleChange, QtCore.QEvent.FontChange):
-            self.updateGeometry()
-        return super().eventFilter(obj, event)
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.updateGeometry()  # new width -> new height; let the scroll area know
+
+    def changeEvent(self, event):  # font size changed via stylesheet
+        super().changeEvent(event)
+        if event.type() in (QtCore.QEvent.StyleChange, QtCore.QEvent.FontChange):
+            QtCore.QTimer.singleShot(0, self.updateGeometry)
+
+    def selected_ids(self):
+        return [b.property("item_id") for b in self.buttons if b.isChecked()]
+
+    def set_selected(self, ids):
+        ids = set(ids)
+        for b in self.buttons:
+            b.setChecked(b.property("item_id") in ids)
+
+    def clear(self):
+        self.set_selected([])
 
 
 class Toast(QtWidgets.QLabel):
@@ -120,25 +233,36 @@ class CustomersPage(QtWidgets.QWidget):
         super().__init__(parent)
         self.db = db
         self.mode = "plate"
+        self.rows = []
         outer = QtWidgets.QHBoxLayout(self)
         sized(outer, "setContentsMargins", 20, 16, 20, 16)
         sized(outer, "setSpacing", 16)
 
-        # ---- left: list + search
-        card = Card("客戶資料")
-        self.toast = Toast()
-        card.add_header_widget(self.toast)
+        # ---- left: list (actions in its title row) + search
+        card = Card("")  # the 客戶資料 tab already names this page; keep the room for the buttons
         self.count_label = label("", "muted", wrap=False)
-        card.add_header_widget(self.count_label)
+        card.header.insertWidget(0, self.count_label)
+        self.toast = Toast()
+        card.header.insertWidget(1, self.toast)
+        for text, role, slot in [("＋ 新增", "primary", self.add_customer),
+                                 ("修改", None, self.edit_customer),
+                                 ("刪除", "danger", self.delete_customer),
+                                 ("客戶資訊", None, self.show_info)]:
+            b = button(text, role, slot)
+            if role == "primary":
+                b.setProperty("role", "primarysmall")
+            card.add_header_widget(b)
+
         # 備註 is rarely used: a narrow column at the end (full text on hover / in 客戶資訊)
         self.table = make_table(["車牌號碼", "電話號碼", "上次來店", "備註"])
         hh = self.table.horizontalHeader()
-        hh.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
-        hh.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
-        hh.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeToContents)
-        hh.setSectionResizeMode(3, QtWidgets.QHeaderView.Fixed)
+        # plate / phone / last visit always fully visible; 備註 gets whatever room is left
+        for c in (0, 1, 2):
+            hh.setSectionResizeMode(c, QtWidgets.QHeaderView.ResizeToContents)
+        hh.setSectionResizeMode(3, QtWidgets.QHeaderView.Stretch)
         self.table.setTextElideMode(QtCore.Qt.ElideRight)
-        self.table.itemSelectionChanged.connect(self._show_selected)
+        self.table.setWordWrap(False)  # one line per customer
+        self.table.itemSelectionChanged.connect(self._selection_changed)
         self.table.doubleClicked.connect(lambda _i: self.show_info())
         sized(self.table, "setMinimumHeight", 200)
         card.add(self.table, 1)
@@ -154,43 +278,30 @@ class CustomersPage(QtWidgets.QWidget):
         self.phone = phone_edit("輸入電話號碼")
         for w in (self.part1, self.part2, self.phone):
             w.setProperty("role", "search")
-            sized(w, "setMinimumWidth", 130)
+            sized(w, "setMinimumWidth", 110)
         search.addWidget(self.part1, 2)
         search.addWidget(self.dash)
         search.addWidget(self.part2, 2)
         search.addWidget(self.phone, 4)
         search.addWidget(button("清除", "link", self.reset))
         card.add(search)
-        outer.addWidget(card, 1)
+        outer.addWidget(card, 3)
 
-        # ---- right: actions
-        actions = Card("")
-        actions.add(label("目前選擇", "tilecap", wrap=False))
-        self.selected_label = label("", "selected", wrap=False)
-        self.selected_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        actions.add(self.selected_label)
-        for text, role, slot in [("＋ 新增資料", "primary", self.add_customer),
-                                 ("修改資料", "big", self.edit_customer),
-                                 ("刪除資料", "bigdanger", self.delete_customer)]:
-            actions.add(button(text, role, slot))
-        actions.add(divider())
-        for text, role, slot in [("記錄消費", "action", self.record_wash),
-                                 ("客戶資訊", "big", self.show_info)]:
-            actions.add(button(text, role, slot))
-        actions.lay.addStretch(1)
-        outer.addWidget(SideColumn(actions))
+        # ---- right: quick 記錄消費 for the selected car
+        self.charge = ChargePanel(db)
+        self.charge.saved.connect(self._charged)
+        self.charge.items_changed.connect(self.data_changed.emit)
+        outer.addWidget(self.charge, 2)
 
-        # typing filters the list (after a short pause)
-        self._timer = QtCore.QTimer(self)
+        self._timer = QtCore.QTimer(self)  # filter after a short pause in typing
         self._timer.setSingleShot(True)
         self._timer.setInterval(200)
-        self._timer.timeout.connect(self.refresh)
+        self._timer.timeout.connect(lambda: self.refresh(auto_pick=True))
         for w in (self.part1, self.part2, self.phone):
             w.textChanged.connect(lambda _t: self._timer.start())
             w.installEventFilter(self)
         self.table.installEventFilter(self)
         self.part1.returnPressed.connect(self.part2.setFocus)
-        self.table.setWordWrap(False)  # one line per customer (long notes show as a tooltip)
         self.set_mode("plate", focus=False, load=False)  # MainWindow.show_page loads the list
 
     # ------------------------------------------------------------ search / keys
@@ -208,14 +319,14 @@ class CustomersPage(QtWidgets.QWidget):
         if load:
             self.refresh()
         if focus:
-            (self.part1 if plate else self.phone).setFocus()
+            self.focus_search()
 
     def reset(self):
         """ESC / 清除: empty the search and start again."""
         self.set_mode("plate")
 
     def focus_search(self):
-        """Put the cursor back in the search box (after dialogs / tab switches)."""
+        """Put the cursor back in the search box (after dialogs / saving / tab switches)."""
         (self.part1 if self.mode == "plate" else self.phone).setFocus()
 
     def eventFilter(self, obj, event):
@@ -230,8 +341,11 @@ class CustomersPage(QtWidgets.QWidget):
         else:
             super().keyPressEvent(event)
 
+    def _searching(self) -> bool:
+        return bool(self.part1.text() or self.part2.text() or self.phone.text())
+
     # ----------------------------------------------------------------- list
-    def refresh(self, select_id: Optional[int] = None):
+    def refresh(self, select_id: Optional[int] = None, auto_pick: bool = False):
         self._timer.stop()
         if select_id is None:
             select_id = self.selected_id(quiet=True)
@@ -240,44 +354,40 @@ class CustomersPage(QtWidgets.QWidget):
         else:
             rows = self.db.list_customers(phone=self.phone.text())
         self.rows = rows
+        if auto_pick and len(rows) == 1 and self._searching():
+            select_id = rows[0]["id"]  # a search that finds one car selects it: ready to charge
+        self.table.blockSignals(True)
         self.table.clearSelection()
-        self.table.horizontalHeader().resizeSection(3, px(150))  # narrow, scales with the UI
-        fill_table(self.table, [(("★ " if r["vip"] else "") + r["plate"], format_phone(r["phone"]),
-                                 last_visit_text(r["last_visit"])[0], r["note"]) for r in rows],
-                   row_data=[r["id"] for r in rows], fit_rows=False)
         bold = QtGui.QFont(self.table.font())
         bold.setBold(True)
-        selected_row = -1
-        for i, r in enumerate(rows):
+        colors = {}
+
+        def decorate(i):  # runs inside fill_table while column sizing is paused
+            r = rows[i]
             self.table.item(i, 0).setFont(bold)
             self.table.item(i, 1).setFont(bold)  # the number they look up to call
             color = last_visit_text(r["last_visit"])[1]
             if color:
-                self.table.item(i, 2).setForeground(QtGui.QColor(color))
+                self.table.item(i, 2).setForeground(colors.setdefault(color, QtGui.QColor(color)))
             if r["note"]:
                 self.table.item(i, 3).setToolTip(r["note"])
-            if r["id"] == select_id:
-                selected_row = i
+
+        fill_table(self.table, [(("★ " if r["vip"] else "") + r["plate"], format_phone(r["phone"]),
+                                 last_visit_text(r["last_visit"])[0], r["note"]) for r in rows],
+                   row_data=[r["id"] for r in rows], fit_rows=False, decorate=decorate)
+        selected_row = next((i for i, r in enumerate(rows) if r["id"] == select_id), -1)
         if selected_row >= 0:
             self.table.selectRow(selected_row)
             self.table.scrollToItem(self.table.item(selected_row, 0), QtWidgets.QAbstractItemView.PositionAtCenter)
-        self._show_selected()
+        self.table.blockSignals(False)
+        self._selection_changed()
         total = self.db.count_customers()
         self.count_label.setText(f"共 {len(rows):,} 筆" if len(rows) == total
                                  else f"找到 {len(rows):,} 筆（共 {total:,} 筆）")
 
-    def _show_selected(self):
+    def _selection_changed(self):
         cid = self.selected_id(quiet=True)
-        c = next((r for r in getattr(self, "rows", []) if r["id"] == cid), None) if cid is not None else None
-        if c:
-            phone = format_phone(c["phone"]) or "（沒有電話）"
-            self.selected_label.setText(f"{c['plate']}\n{phone}")
-            self.selected_label.setProperty("empty", False)
-        else:
-            self.selected_label.setText("還沒有選擇\n請點表格中的一行")
-            self.selected_label.setProperty("empty", True)
-        self.selected_label.style().unpolish(self.selected_label)
-        self.selected_label.style().polish(self.selected_label)
+        self.charge.set_customer(next((r for r in self.rows if r["id"] == cid), None) if cid else None)
 
     def selected_id(self, quiet: bool = False) -> Optional[int]:
         row = self.table.currentRow()
@@ -292,6 +402,12 @@ class CustomersPage(QtWidgets.QWidget):
         return self.db.get_customer(cid) if cid is not None else None
 
     # --------------------------------------------------------------- actions
+    def _charged(self, customer: dict, amount: int):
+        self.refresh(select_id=customer["id"])
+        self.toast.show_text(f"✓ {customer['plate']} 已記錄 {fmt_money(amount)}")
+        self.data_changed.emit()
+        self.focus_search()
+
     def add_customer(self):
         dlg = CustomerDialog(self.db, parent=self)
         dlg.exec_()
@@ -331,17 +447,6 @@ class CustomersPage(QtWidgets.QWidget):
             self.data_changed.emit()
         self.focus_search()
 
-    def record_wash(self):
-        c = self.selected_customer()
-        if not c:
-            return
-        dlg = WashDialog(self.db, c, parent=self)
-        if dlg.exec_() == QtWidgets.QDialog.Accepted:
-            self.refresh(select_id=c["id"])
-            self.toast.show_text(f"✓ {c['plate']} 已記錄 {fmt_money(dlg.amount)}")
-            self.data_changed.emit()
-        self.focus_search()
-
     def show_info(self):
         c = self.selected_customer()
         if not c:
@@ -350,6 +455,142 @@ class CustomersPage(QtWidgets.QWidget):
         self.refresh(select_id=c["id"])
         self.data_changed.emit()
         self.focus_search()
+
+
+# ============================================================ 記錄消費 panel
+class ChargePanel(Card):
+    """Record a wash for the selected car right on the main screen:
+    tap service items, type the amount, 儲存消費."""
+
+    saved = pyqtSignal(dict, int)
+    items_changed = pyqtSignal()
+
+    def __init__(self, db: Database, parent=None):
+        super().__init__("記錄消費", parent)
+        self.db = db
+        self.customer = None
+        self.who = label("", "chargeplate", wrap=False)
+        self.header.insertWidget(1, self.who)
+
+        self.hint = label("請先在左邊點一台車", "empty")
+        self.add(self.hint)
+
+        head = QtWidgets.QHBoxLayout()
+        head.addWidget(label("服務項目", "field", wrap=False))
+        head.addWidget(label("可多選", "muted", wrap=False))
+        head.addStretch(1)
+        head.addWidget(button("＋ 新增項目", "link", self._add_item))
+        head.addWidget(button("管理項目", "link", self._manage_items))
+        self.add(head)
+        self.items = ChipFlow()
+        self.items.rename_requested.connect(self._rename_item)
+        self.items.delete_requested.connect(self._delete_item)
+        holder = QtWidgets.QWidget()
+        hl = QtWidgets.QVBoxLayout(holder)
+        hl.setContentsMargins(0, 0, 6, 0)
+        hl.addWidget(self.items)
+        hl.addStretch(1)
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(holder)
+        self.add(scroll, 1)
+
+        form = QtWidgets.QGridLayout()
+        sized(form, "setHorizontalSpacing", 10)
+        sized(form, "setVerticalSpacing", 10)
+        form.addWidget(label("金額", "field", wrap=False), 0, 0)
+        amt = QtWidgets.QHBoxLayout()
+        self.amount = QtWidgets.QLineEdit()
+        self.amount.setPlaceholderText("輸入金額")
+        self.amount.setProperty("role", "search")
+        self.amount.setValidator(QtGui.QRegExpValidator(QtCore.QRegExp("[0-9]{0,7}"), self.amount))
+        amt.addWidget(self.amount, 1)
+        amt.addWidget(label("元", "muted", wrap=False))
+        form.addLayout(amt, 0, 1)
+        form.addWidget(label("備註", "field", wrap=False), 1, 0)
+        self.note = QtWidgets.QLineEdit()
+        self.note.setProperty("role", "small")
+        self.note.setPlaceholderText("可不填")
+        form.addWidget(self.note, 1, 1)
+        form.setColumnStretch(1, 1)
+        self.add(form)
+        self.save_btn = button("儲存消費", "primary", self.save)
+        self.add(self.save_btn)
+        self.amount.returnPressed.connect(self.note.setFocus)
+        self.note.returnPressed.connect(self.save)
+        self.reload_items()
+        self.set_customer(None)
+
+    # ------------------------------------------------------------------ state
+    def set_customer(self, customer: Optional[dict]):
+        changed = (customer or {}).get("id") != (self.customer or {}).get("id")
+        self.customer = customer
+        on = customer is not None
+        self.who.setText(customer["plate"] if on else "")
+        self.who.setVisible(on)
+        self.hint.setVisible(not on)
+        for w in (self.items, self.amount, self.note, self.save_btn):
+            w.setEnabled(on)
+        if changed:
+            self.clear()
+
+    def clear(self):
+        self.items.clear()
+        self.amount.clear()
+        self.note.clear()
+
+    def reload_items(self, keep_selection: bool = True):
+        self.items.set_items(self.db.list_services(), keep_selection=keep_selection)
+
+    # ------------------------------------------------------------- items
+    def _after_items_changed(self, select_id=None):
+        selected = self.items.selected_ids() + ([select_id] if select_id else [])
+        self.reload_items(keep_selection=False)
+        self.items.set_selected(selected)
+        self.items_changed.emit()
+
+    def _add_item(self):
+        new_id = add_item_flow(self, self.db)
+        if new_id is not None:
+            self._after_items_changed(new_id if self.customer else None)
+
+    def _rename_item(self, item_id, name):
+        if rename_item_flow(self, self.db, item_id, name):
+            self._after_items_changed()
+
+    def _delete_item(self, item_id, name):
+        if delete_item_flow(self, self.db, item_id, name):
+            self._after_items_changed()
+
+    def _manage_items(self):
+        dlg = ItemManagerDialog(self.db, self)
+        dlg.manager.changed.connect(self._after_items_changed)
+        dlg.exec_()
+
+    # ------------------------------------------------------------------ save
+    def save(self):
+        if self.customer is None:
+            return
+        if not self.amount.text().strip():
+            self.amount.setFocus()
+            warn(self, "請輸入金額。")
+            return
+        names = [b.property("item_name") for b in self.items.buttons if b.isChecked()]
+        extra = self.note.text().strip()
+        note = "、".join(names)
+        if extra:
+            note = f"{note} - {extra}" if note else extra
+        try:
+            self.db.add_wash(self.customer["part1"], self.customer["part2"], self.amount.text(), None, note)
+        except DataError as e:
+            warn(self, str(e))
+            return
+        amount = int(self.amount.text())
+        customer = self.customer
+        self.clear()
+        self.saved.emit(customer, amount)
 
 
 # ============================================================== brand chips
@@ -557,86 +798,6 @@ class CustomerDialog(QtWidgets.QDialog):
                 self.accept()
         except DataError as e:
             warn(self, str(e))
-
-
-# ============================================================ 記錄消費 dialog
-class WashDialog(QtWidgets.QDialog):
-    def __init__(self, db: Database, customer: dict, parent=None):
-        super().__init__(parent)
-        self.db = db
-        self.customer = customer
-        self.amount = 0
-        self.setWindowTitle("記錄消費")
-        lay = QtWidgets.QVBoxLayout(self)
-        sized(lay, "setContentsMargins", 20, 16, 20, 16)
-        sized(lay, "setSpacing", 14)
-        card = Card("記錄消費")
-        head = QtWidgets.QHBoxLayout()
-        head.addWidget(label(customer["plate"], "plate", wrap=False))
-        head.addStretch(1)
-        head.addWidget(label(f"日期：今天 {fmt_date(_dt.date.today().isoformat())}", "muted", wrap=False))
-        card.add(head)
-        card.add(label("洗車類型", "field", wrap=False))
-        types = QtWidgets.QHBoxLayout()
-        self.type_group = QtWidgets.QButtonGroup(self)
-        for i, name in enumerate(config.WASH_TYPES):
-            b = button(name, "item")
-            b.setCheckable(True)
-            b.setChecked(i == 0)
-            self.type_group.addButton(b)
-            types.addWidget(b, 1)
-        card.add(types)
-        card.add(label("消費金額", "field", wrap=False))
-        amt = QtWidgets.QHBoxLayout()
-        self.amount_edit = QtWidgets.QLineEdit()
-        self.amount_edit.setPlaceholderText("例如 300")
-        self.amount_edit.setValidator(QtGui.QRegExpValidator(QtCore.QRegExp("[0-9]{0,7}"), self.amount_edit))
-        amt.addWidget(self.amount_edit, 1)
-        amt.addWidget(label("元", "muted", wrap=False))
-        card.add(amt)
-        card.add(label("備註（可不填）", "field", wrap=False))
-        self.note_edit = QtWidgets.QLineEdit()
-        self.note_edit.setPlaceholderText("例如 打蠟、內裝清潔")
-        card.add(self.note_edit)
-        card.lay.addStretch(1)
-        lay.addWidget(card, 1)
-        row = QtWidgets.QHBoxLayout()
-        row.addWidget(button("取消", slot=self.reject))
-        row.addStretch(1)
-        ok = button("確定", "primary", self.save)
-        sized(ok, "setMinimumWidth", 220)
-        row.addWidget(ok)
-        lay.addLayout(row)
-        self.amount_edit.setFocus()
-        fit_to_screen(self, 760, 600)
-
-    def wash_type(self) -> str:
-        b = self.type_group.checkedButton()
-        return b.text() if b else config.WASH_TYPES[0]
-
-    def keyPressEvent(self, event):
-        if event.key() in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
-            if self.focusWidget() is self.amount_edit:
-                self.note_edit.setFocus()
-            else:
-                self.save()
-        else:
-            super().keyPressEvent(event)  # ESC closes, as before
-
-    def save(self):
-        if not self.amount_edit.text().strip():
-            self.amount_edit.setFocus()
-            warn(self, "請輸入金額。")
-            return
-        extra = self.note_edit.text().strip()
-        note = f"{self.wash_type()} - {extra}" if extra else self.wash_type()
-        try:
-            self.db.add_wash(self.customer["part1"], self.customer["part2"], self.amount_edit.text(), None, note)
-        except DataError as e:
-            warn(self, str(e))
-            return
-        self.amount = int(self.amount_edit.text())
-        self.accept()
 
 
 # ============================================================ 客戶資訊 dialog

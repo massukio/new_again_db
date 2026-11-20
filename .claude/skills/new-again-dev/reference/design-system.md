@@ -8,9 +8,13 @@ and elegant"; remove anything too hard for an elder.
 
 - Main job: find a plate and read its phone number to call the customer, so
   plate and phone are bold and large; 備註 is a narrow last column.
-- Main screen: list on the left (車牌號碼, 電話號碼, 上次來店, 備註), on the right the
-  「目前選擇」 box (plate + phone) then the action buttons
-  (＋ 新增資料, 修改資料, 刪除資料 | 記錄消費, 客戶資訊), search under the list:
+- Main screen (owner-approved layout, 2026-11-20):
+  left card = header row [共 N 筆 · toast · ＋ 新增 | 修改 | 刪除 | 客戶資訊], the list
+  (車牌號碼, 電話號碼, 上次來店 sized to content; 備註 takes what is left), search
+  under the list; right card = 記錄消費 for the selected car: plate badge, service
+  item chips (wrap like words, multi-select, ＋ 新增項目 / 管理項目, right-click to
+  rename/delete), 金額, 備註, 儲存消費. A search that finds exactly one car selects
+  it, so "look up the phone, then charge" is one flow. Search under the list:
   車牌查詢 (前半 — 後半) / 電話查詢, filtering while typing.
 - Enter moves to the next box; ESC clears the search and focuses 前半.
 - 新增資料 stays open after saving (clears itself) to enter the next car.
@@ -18,8 +22,9 @@ and elegant"; remove anything too hard for an elder.
   (加這個號碼 / 不要 → keeps the typing, focuses the phone). Edit: plate that belongs
   to another row → refused. ESC: add = clear (close when empty), edit = back out.
 - After any dialog or tab switch the cursor goes back to the search box.
-- 記錄消費: type chips (一般洗車/精緻洗車/美容/其他) + amount + optional note,
-  dated today; Enter amount → note → save; ESC closes.
+- 記錄消費 (panel): chips + amount (required) + optional note, dated today;
+  Enter amount → note → save; after saving the panel clears and the cursor
+  returns to the search box.
 - 客戶資訊 on button or double-click: totals, history, ★ VIP toggle,
   delete a mistaken wash.
 

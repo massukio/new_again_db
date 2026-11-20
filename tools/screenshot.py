@@ -16,7 +16,7 @@ from app.db import Database  # noqa: E402
 def main(out):
     os.makedirs(out, exist_ok=True)
     app = QtWidgets.QApplication(sys.argv)
-    from app.ui.customers import CustomerDialog, CustomerInfoDialog, WashDialog
+    from app.ui.customers import CustomerDialog, CustomerInfoDialog
     from app.ui.main_window import MainWindow
     db = Database(config.db_path())
     win = MainWindow(db)
@@ -42,6 +42,12 @@ def main(out):
     page.table.selectRow(0)
     settle()
     win.grab().save(os.path.join(out, "main_selected.png"))
+    for b in page.charge.items.buttons[:2]:
+        b.setChecked(True)
+    page.charge.amount.setText("1050")
+    settle()
+    win.grab().save(os.path.join(out, "main_charge.png"))
+    page.charge.clear()
     page.part1.setText("A")
     page.refresh()
     settle()
@@ -51,7 +57,6 @@ def main(out):
     busiest = max(cust, key=lambda c: db.customer_summary(c["part1"], c["part2"])["visits"]) if cust else None
     for name, make in [("add", lambda: CustomerDialog(db, parent=win)),
                        ("edit", lambda: CustomerDialog(db, customer=busiest, parent=win)),
-                       ("wash", lambda: WashDialog(db, busiest, parent=win)),
                        ("info", lambda: CustomerInfoDialog(db, busiest, parent=win))]:
         if busiest is None and name != "add":
             continue

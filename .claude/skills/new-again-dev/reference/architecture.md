@@ -11,8 +11,11 @@ app/db.py              Database: customers, wash records, reports, backup_to (VA
 app/backup.py          daily auto backup + before-restore safety copies (pruned)
 app/brands.py          brand list + logo paths (assets/brands/*.png)
 app/ui/main_window.py  header (icon, name, tabs), page stack, window-size font scaling
-app/ui/customers.py    CustomersPage (main), CustomerDialog (add/edit), WashDialog,
-                       CustomerInfoDialog, BrandGrid, Toast
+app/ui/customers.py    CustomersPage (main: list, header actions, search), ChargePanel
+                       (記錄消費: ChipFlow service items + amount + note), CustomerDialog
+                       (add/edit), CustomerInfoDialog, BrandGrid, FlowLayout/ChipFlow, Toast
+app/ui/items.py        service item flows (add / rename / delete / reorder) + manager dialog
+                       (same file shape as autorepair_db's items.py)
 app/ui/pages.py        ReportPage, BackupPage, SettingsPage
 app/ui/widgets.py      shared widgets (Card, Tile, Segmented, fill_table, messages ...) -
                        same file as in autorepair_db
@@ -31,6 +34,9 @@ plate_info(id, part1, part2, phone_number, note NULL, brand '', vip 0,
 wash_records(id, plate_part1, plate_part2, amount INT, wash_date 'YYYY-MM-DD',
              note '一般洗車 - 額外備註', created_at)     -- linked by plate text
 settings(key, value)                                   -- new in 2.0; old apps ignore it
+services(id, name UNIQUE, sort_order, active)          -- new in 2.0: service item chips,
+                                                          seeded once from the shop's price-list
+                                                          names (config.DEFAULT_SERVICES); soft delete
 idx_wash_plate (plate_part1, plate_part2, wash_date, amount)   covering: per-customer
 idx_wash_day   (wash_date, amount, plate_part1, plate_part2)   covering: reports
 ```
@@ -42,6 +48,9 @@ idx_wash_day   (wash_date, amount, plate_part1, plate_part2)   covering: reports
   another row still uses the old plate. Deleting a customer keeps its wash
   records (earnings stay correct).
 - UI tracks rows by `plate_info.id` (table UserRole), never by parsing cell text.
+- A wash's note = chosen service names joined with 「、」 plus 「 - 備註」 — the same
+  text format old versions wrote, so reports and old apps read it unchanged. No
+  prices are stored for services (owner: "不需要價格，只要項目"); amount is typed.
 
 ## Compatibility (why the schema did not change)
 

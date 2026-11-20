@@ -172,6 +172,22 @@ def build_stylesheet(base: int) -> str:
         background: {SURFACE_ALT}; color: {MUTED}; border: 2px dashed {BORDER_STRONG};
         font-size: {base}pt; font-weight: normal;
     }}
+    QPushButton[role="primarysmall"] {{
+        background: {SUCCESS}; color: white; border: none; font-weight: bold; padding: {p(9)}px {p(16)}px;
+    }}
+    QPushButton[role="primarysmall"]:hover {{ background: {SUCCESS_DARK}; }}
+    QLabel[role="chargeplate"] {{
+        background: {PRIMARY}; color: white; border-radius: {p(8)}px; padding: {p(4)}px {p(12)}px;
+        font-size: {base + 4}pt; font-weight: bold;
+    }}
+    QPushButton[role="chip"] {{
+        font-size: {base}pt; padding: {p(9)}px {p(14)}px; border-radius: {p(18)}px;
+        border: 1px solid {BORDER_STRONG};
+    }}
+    QPushButton[role="chip"]:checked {{ background: {SUCCESS}; color: white; border: 1px solid {SUCCESS_DARK}; font-weight: bold; }}
+    QPushButton[role="chip"]:disabled {{ color: #B0B0B0; border-color: {BORDER}; background: {SURFACE_ALT}; }}
+    QPushButton[role="item"]:disabled {{ color: #B0B0B0; border-color: {BORDER}; background: {SURFACE_ALT}; }}
+    QLineEdit:disabled {{ background: {SURFACE_ALT}; border-color: {BORDER}; }}
     QLabel[role="dash"] {{ font-size: {base + 6}pt; color: {MUTED}; }}
     QPushButton[role="link"] {{
         background: transparent; border: none; color: {PRIMARY}; font-weight: bold; padding: {p(6)}px {p(10)}px;
@@ -230,6 +246,10 @@ def build_stylesheet(base: int) -> str:
     QMessageBox QLabel {{ font-size: {base + 1}pt; }}
     QMessageBox QPushButton {{ min-width: {p(120)}px; }}
 
+    /* disabled must look disabled, whatever the role (placed last so it wins) */
+    QPushButton:disabled, QPushButton[role]:disabled {{
+        background: {SURFACE_ALT}; color: #A9A9A9; border: 1px solid {BORDER};
+    }}
     /* keyboard focus must always be visible (placed last so it wins over role styles) */
     QPushButton:focus, QPushButton[role]:focus {{ border: {p(3)}px solid #D99A00; }}
     QMessageBox QPushButton:default {{ border: {p(3)}px solid #D99A00; }}

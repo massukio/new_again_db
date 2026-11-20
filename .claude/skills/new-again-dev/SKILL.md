@@ -15,8 +15,9 @@ what the task needs, but always do steps 1 and 4.
   delete flow**. Never change that flow (see `reference/design-system.md`).
 - Data: customers = plate (two halves, e.g. ABC-1234) + phone + note + optional
   brand + VIP; wash records = plate + amount + date + type/note.
-- Pages: 客戶資料 (main) · 營收報表 · 備份/還原 · 設定. Dialogs: 新增/修改資料,
-  記錄消費, 客戶資訊.
+- Pages: 客戶資料 (main: list + search on the left, 記錄消費 panel with editable
+  service-item chips on the right) · 營收報表 · 備份/還原 · 設定. Dialogs:
+  新增/修改資料, 客戶資訊, 管理服務項目.
 - Data folder `再新洗車資料/` next to the exe (`洗車資料.db`, `自動備份/`, `錯誤紀錄.log`).
 - Sister project with the same architecture and design system: `autorepair_db`
   (汽車保養資料庫). Improvements usually apply to both.

@@ -43,3 +43,10 @@ Format: `## YYYY-MM-DD — title` then What happened / Cause / Rule.
   qFatal. (The app's `start.py` installs a hook that logs to 錯誤紀錄.log.)
 - Rule: tests install a hook that records such exceptions and fails the test
   (`tests/conftest.py`); stop timers before closing the database in fixtures.
+
+## 2026-11-20 — Space on the main screen
+- What happened: adding the 記錄消費 panel squeezed the list (clipped header buttons,
+  cut phone numbers) and a fixed-column chip grid clipped long service names.
+- Rule: size the important columns to content and let the least important one
+  (備註) stretch; drop titles the tab already shows; use a flow layout for chips of
+  very different lengths (`ChipFlow`). Check 1070×540 and 1280×760 every time.

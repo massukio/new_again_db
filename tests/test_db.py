@@ -292,3 +292,34 @@ def test_locked_database_is_not_set_aside(tmp_path):
         holder.rollback()
         holder.close()
     assert p.exists() and not list(tmp_path.glob("無法開啟的資料_*"))
+
+
+def test_service_items(db):
+    names = [x["name"] for x in db.list_services()]
+    assert names[0] == "泡沫外表洗車" and names[-1] == "其他" and len(names) == 17
+    sid = db.add_service("打蠟加購")
+    with pytest.raises(DataError):
+        db.add_service("打蠟加購")
+    with pytest.raises(DataError):
+        db.rename_service(sid, "  ")
+    db.rename_service(sid, "打蠟")
+    db.move_service(sid, -1)
+    assert db.list_services()[-2]["name"] == "打蠟"
+    db.hide_service(sid)
+    assert "打蠟" not in [x["name"] for x in db.list_services()]
+    assert db.add_service("打蠟") == sid               # re-adding un-hides
+    db.hide_service(sid)
+    db.rename_service(db.list_services()[0]["id"], "打蠟")  # hidden name moved aside
+    assert "打蠟（舊1）" in [x["name"] for x in db.list_services(include_hidden=True)]
+
+
+def test_services_seeded_once_and_on_upgrade(tmp_path):
+    p = tmp_path / "database.db"
+    make_db(p, V11_SCHEMA)
+    d = Database(str(p))
+    assert len(d.list_services()) == 17                 # an upgraded old database gets the price list
+    d.hide_service(d.list_services()[0]["id"])
+    d.close()
+    d = Database(str(p))
+    assert len(d.list_services()) == 16                 # not re-seeded on the next start
+    d.close()

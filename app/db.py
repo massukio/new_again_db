@@ -11,6 +11,9 @@ wash_records : one row per paid visit, linked to the plate text
                'YYYY-MM-DD', note ('一般洗車 - 額外備註').
 settings     : key/value (schema_version, font_size, last backup ...). New in 2.0;
                older apps simply ignore it.
+services     : selectable service items (name, order, active). New in 2.0;
+               deleting only hides. A wash stores the chosen names in its note
+               ('泡沫外表洗車、皮椅內裝保養 - 備註'), the same format old versions used.
 
 Old layouts handled by ``_create_schema``: original (plate_info without brand /
 vip, no wash_records), 1.1 (brand), 1.1+ (vip, wash_records).
@@ -94,12 +97,24 @@ def _create_schema(conn: sqlite3.Connection) -> None:
             key   TEXT PRIMARY KEY,
             value TEXT
         );
+        CREATE TABLE IF NOT EXISTS services (
+            id         INTEGER PRIMARY KEY,
+            name       TEXT NOT NULL UNIQUE,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            active     INTEGER NOT NULL DEFAULT 1
+        );
     """)
     cols = _columns(conn, "plate_info")
     if "brand" not in cols:
         conn.execute("ALTER TABLE plate_info ADD COLUMN brand TEXT DEFAULT ''")
     if "vip" not in cols:
         conn.execute("ALTER TABLE plate_info ADD COLUMN vip INTEGER DEFAULT 0")
+    if conn.execute("SELECT value FROM settings WHERE key='services_seeded'").fetchone() is None:
+        from app.config import DEFAULT_SERVICES
+        if not conn.execute("SELECT 1 FROM services LIMIT 1").fetchone():
+            conn.executemany("INSERT OR IGNORE INTO services(name, sort_order) VALUES(?, ?)",
+                             [(name, i) for i, name in enumerate(DEFAULT_SERVICES)])
+        conn.execute("INSERT INTO settings(key, value) VALUES('services_seeded', '1')")
     conn.executescript("""
         DROP INDEX IF EXISTS idx_wash_date;
         CREATE INDEX IF NOT EXISTS idx_wash_plate ON wash_records(plate_part1, plate_part2, wash_date, amount);
@@ -251,6 +266,59 @@ class Database:
     def set_vip(self, customer_id: int, vip: bool) -> None:
         with self.conn:
             self.conn.execute("UPDATE plate_info SET vip=? WHERE id=?", (1 if vip else 0, customer_id))
+
+    # ------------------------------------------------------------ service items
+    def list_services(self, include_hidden: bool = False) -> List[dict]:
+        sql = "SELECT id, name, sort_order, active FROM services"
+        if not include_hidden:
+            sql += " WHERE active=1"
+        return [dict(r) for r in self.conn.execute(sql + " ORDER BY sort_order, id")]
+
+    def add_service(self, name: str) -> int:
+        name = (name or "").strip()
+        if not name:
+            raise DataError("項目名稱不能空白。")
+        row = self.conn.execute("SELECT id, active FROM services WHERE name=?", (name,)).fetchone()
+        order = self.conn.execute("SELECT COALESCE(MAX(sort_order), -1) + 1 FROM services").fetchone()[0]
+        with self.conn:
+            if row is not None:
+                if row["active"]:
+                    raise DataError(f"「{name}」已經存在了。")
+                self.conn.execute("UPDATE services SET active=1, sort_order=? WHERE id=?", (order, row["id"]))
+                return row["id"]
+            return self.conn.execute("INSERT INTO services(name, sort_order) VALUES(?, ?)",
+                                     (name, order)).lastrowid
+
+    def rename_service(self, service_id: int, name: str) -> None:
+        name = (name or "").strip()
+        if not name:
+            raise DataError("項目名稱不能空白。")
+        other = self.conn.execute("SELECT id, active FROM services WHERE name=? AND id<>?",
+                                  (name, service_id)).fetchone()
+        with self.conn:
+            if other is not None:
+                if other["active"]:
+                    raise DataError(f"「{name}」已經存在了。")
+                n = 1  # a deleted item has this name: move it out of the way
+                while self.conn.execute("SELECT 1 FROM services WHERE name=?", (f"{name}（舊{n}）",)).fetchone():
+                    n += 1
+                self.conn.execute("UPDATE services SET name=? WHERE id=?", (f"{name}（舊{n}）", other["id"]))
+            self.conn.execute("UPDATE services SET name=? WHERE id=?", (name, service_id))
+
+    def hide_service(self, service_id: int) -> None:
+        with self.conn:
+            self.conn.execute("UPDATE services SET active=0 WHERE id=?", (service_id,))
+
+    def move_service(self, service_id: int, delta: int) -> None:
+        ids = [x["id"] for x in self.list_services()]
+        if service_id not in ids:
+            return
+        i, j = ids.index(service_id), ids.index(service_id) + delta
+        if 0 <= j < len(ids):
+            ids[i], ids[j] = ids[j], ids[i]
+            with self.conn:
+                self.conn.executemany("UPDATE services SET sort_order=? WHERE id=?",
+                                      [(n, sid) for n, sid in enumerate(ids)])
 
     def count_customers(self) -> int:
         return self.conn.execute("SELECT COUNT(*) FROM plate_info").fetchone()[0]

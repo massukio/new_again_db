@@ -21,3 +21,9 @@
   hover and in 客戶資訊), "no need such big room".
 - 2026-11-20 — Duplicate-plate question answered 「不要」 keeps the typed data and
   focuses the phone box (old app cleared everything). ESC in 修改資料 backs out.
+- 2026-11-20 — Icon: white car with three water drops on a teal rounded square
+  (owner generated it; `assets/icon_source.png`), replacing the 「洗」 placeholder.
+- 2026-11-20 — 「目前選擇」 box removed (redundant with the highlighted row). Main
+  screen: actions in the list header, right column = 記錄消費 panel so a phone
+  lookup and the charge happen together. Services = editable items from the shop's
+  price list, NO prices or car sizes ("不需要價格，只要項目就好"); amount is typed.

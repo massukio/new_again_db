@@ -15,7 +15,7 @@ def qapp():
 @pytest.fixture
 def env(qapp, tmp_path, monkeypatch):
     monkeypatch.setenv("NEWAGAIN_DATA_DIR", str(tmp_path))
-    from app.ui import customers, widgets
+    from app.ui import customers, items, widgets
     answers = {"ask": True, "asked": [], "warned": []}
 
     def fake_ask(parent, text, *a, **k):
@@ -25,7 +25,7 @@ def env(qapp, tmp_path, monkeypatch):
     def fake_warn(parent, text, *a, **k):
         answers["warned"].append(text)
 
-    for mod in (customers, widgets):
+    for mod in (customers, items, widgets):  # every module that imported ask/warn
         monkeypatch.setattr(mod, "ask", fake_ask, raising=False)
         monkeypatch.setattr(mod, "warn", fake_warn, raising=False)
     db = Database(config.db_path())
@@ -51,18 +51,46 @@ def settle(qapp):
         qapp.processEvents()
 
 
-def test_selection_is_visible(env, qapp):
+def test_selection_is_visible_and_drives_the_charge_panel(env, qapp):
     win, page, db, _ = env
-    assert "還沒有選擇" in page.selected_label.text()
+    assert not page.charge.save_btn.isEnabled() and page.charge.hint.isVisible()
+    assert "[role]:disabled" in qapp.styleSheet()  # disabled buttons must look disabled
     rect = page.table.visualItemRect(page.table.item(1, 0))
     QTest.mouseClick(page.table.viewport(), QtCore.Qt.LeftButton, pos=rect.center())
     settle(qapp)
     assert page.table.selectionModel().isRowSelected(1, QtCore.QModelIndex())
-    assert page.selected_label.text().startswith("XYZ-5555")
+    assert page.charge.who.text() == "XYZ-5555" and page.charge.save_btn.isEnabled()
     assert "item:selected" in qapp.styleSheet() and "background: #0E6E84" in qapp.styleSheet()
     # selection survives a refresh and is still the same customer
     page.refresh()
-    assert page.selected_label.text().startswith("XYZ-5555")
+    assert page.charge.who.text() == "XYZ-5555"
+
+
+def test_search_one_result_selects_it_and_charge(env, qapp):
+    win, page, db, _ = env
+    page.set_mode("phone")
+    QTest.keyClicks(page.phone, "0922")
+    page.refresh(auto_pick=True)  # what the typing pause (debounce timer) calls
+    settle(qapp)
+    assert page.charge.who.text() == "XYZ-5555"           # found one car -> ready to charge
+    ch = page.charge
+    names = [b.property("item_name") for b in ch.items.buttons]
+    assert names[0] == "泡沫外表洗車"
+    ch.items.buttons[0].click()
+    ch.items.buttons[5].click()
+    QTest.keyClicks(ch.amount, "650")
+    ch.amount.setFocus()
+    QTest.keyClick(ch.amount, QtCore.Qt.Key_Return)
+    ch.note.setText("老客人")  # QTest.keyClicks cannot type Chinese (aborts Qt); set it directly
+    ch.save()
+    w = db.customer_washes("XYZ", "5555")[0]
+    assert w["amount"] == 650 and w["note"] == f"泡沫外表洗車、{names[5]} - 老客人"
+    assert page.toast.isVisible() and "已記錄" in page.toast.text()
+    assert ch.amount.text() == "" and not ch.items.selected_ids()   # ready for the next car
+    assert page.table.item(0, 2).text() == "今天"
+    # amount is required
+    ch.save()
+    assert db.customer_summary("XYZ", "5555")["visits"] == 1
 
 
 def test_search_filters_and_esc_resets(env, qapp):
@@ -85,7 +113,7 @@ def test_search_filters_and_esc_resets(env, qapp):
 
 def test_actions_need_a_selection(env, qapp):
     win, page, db, _ = env
-    page.record_wash()
+    page.edit_customer()
     assert page.toast.isVisible() and "請先" in page.toast.text()
 
 
@@ -126,7 +154,7 @@ def test_add_dialog_stays_open_and_rules(env, qapp):
 
 
 def test_edit_wash_info_delete(env, qapp):
-    from app.ui.customers import CustomerDialog, CustomerInfoDialog, WashDialog
+    from app.ui.customers import CustomerDialog, CustomerInfoDialog
     win, page, db, answers = env
     page.table.selectRow(0)
     c = page.selected_customer()
@@ -138,15 +166,9 @@ def test_edit_wash_info_delete(env, qapp):
     assert dlg.result() == QtWidgets.QDialog.Accepted
     page.refresh(select_id=c["id"])
     assert page.selected_customer()["note"] == "改過"
-    # wash: Enter amount -> note -> save
-    w = WashDialog(db, c, parent=page)
-    w.show()
-    QtWidgets.QApplication.setActiveWindow(w)
-    QTest.keyClicks(w.amount_edit, "500")
-    QTest.keyClick(w.amount_edit, QtCore.Qt.Key_Return)
-    assert w.note_edit.hasFocus()
-    QTest.keyClick(w.note_edit, QtCore.Qt.Key_Return)
-    assert w.result() == QtWidgets.QDialog.Accepted and w.amount == 500
+    # wash via the panel: Enter in the note saves
+    page.charge.amount.setText("500")
+    QTest.keyClick(page.charge.note, QtCore.Qt.Key_Return)
     assert db.customer_summary("ABC", "1234")["visits"] == 2
     # info: delete a mistaken wash
     info = CustomerInfoDialog(db, c, parent=page)
@@ -158,7 +180,7 @@ def test_edit_wash_info_delete(env, qapp):
     page.table.selectRow(0)
     page.delete_customer()
     assert db.get_customer(c["id"]) is None
-    assert "還沒有選擇" in page.selected_label.text()
+    assert page.charge.hint.isVisible() and not page.charge.save_btn.isEnabled()
 
 
 def test_report_page_and_now_button(env, qapp):
@@ -212,3 +234,20 @@ def test_confirm_boxes_default_to_safe_choice(qapp, monkeypatch):
     monkeypatch.setattr(QtWidgets.QMessageBox, "exec_", fake_exec)
     widgets.ask(None, "刪除？", yes="確定刪除", no="不要刪除")
     assert seen["default"] == "不要刪除"
+
+
+def test_items_are_editable_from_the_panel(env, qapp, monkeypatch):
+    from app.ui import items
+    win, page, db, _ = env
+    monkeypatch.setattr(items, "ask_text", lambda *a, **k: "車內除臭")
+    monkeypatch.setattr(items, "info", lambda *a, **k: None)
+    page.table.selectRow(0)
+    page.charge._add_item()
+    names = [b.property("item_name") for b in page.charge.items.buttons]
+    assert names[-1] == "車內除臭" and page.charge.items.buttons[-1].isChecked()
+    sid = page.charge.items.buttons[-1].property("item_id")
+    monkeypatch.setattr(items, "ask_text", lambda *a, **k: "除臭殺菌")
+    page.charge._rename_item(sid, "車內除臭")
+    assert page.charge.items.buttons[-1].property("item_name") == "除臭殺菌"
+    page.charge._delete_item(sid, "除臭殺菌")
+    assert "除臭殺菌" not in [b.property("item_name") for b in page.charge.items.buttons]

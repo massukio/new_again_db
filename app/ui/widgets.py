@@ -60,7 +60,7 @@ def button(text: str, role: Optional[str] = None, slot=None) -> QtWidgets.QPushB
     if role:
         b.setProperty("role", role)
     b.setCursor(QtCore.Qt.PointingHandCursor)
-    b.setFocusPolicy(QtCore.Qt.NoFocus if role in ("item", "nav", "seg", "link", "brand") else QtCore.Qt.StrongFocus)
+    b.setFocusPolicy(QtCore.Qt.NoFocus if role in ("item", "nav", "seg", "link", "brand", "chip") else QtCore.Qt.StrongFocus)
     # never let Enter "click" a button the user cannot see is focused; dialogs handle Enter themselves
     b.setAutoDefault(False)
     if slot is not None:
@@ -471,9 +471,11 @@ def table_item(text: str, data=None, align_right: bool = False) -> QtWidgets.QTa
 
 
 def fill_table(table: QtWidgets.QTableWidget, rows, right=(), row_data=None,
-               fit_rows: bool = True) -> None:
+               fit_rows: bool = True, decorate=None) -> None:
     """Fill a table in one go. Column auto-sizing is paused while filling,
-    otherwise Qt re-measures whole columns after every cell (very slow)."""
+    otherwise Qt re-measures whole columns after every cell (very slow).
+    decorate(row_index) may style the row's items (fonts, colours, tooltips): it runs
+    while sizing is paused - never style items after fill_table returns."""
     hh = table.horizontalHeader()
     modes = [hh.sectionResizeMode(c) for c in range(table.columnCount())]
     for c in range(table.columnCount()):
@@ -486,6 +488,8 @@ def fill_table(table: QtWidgets.QTableWidget, rows, right=(), row_data=None,
             for c, v in enumerate(values):
                 data = row_data[r] if (row_data is not None and c == 0) else None
                 table.setItem(r, c, table_item(v, data, align_right=c in right))
+            if decorate is not None:
+                decorate(r)
     finally:
         for c, m in enumerate(modes):
             hh.setSectionResizeMode(c, m)

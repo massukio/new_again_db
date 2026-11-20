@@ -37,7 +37,14 @@ LEGACY_DB_FILENAME = "database.db"
 
 PLATE_PART_MAX = 4
 PHONE_MAX = 10
-WASH_TYPES = ["一般洗車", "精緻洗車", "美容", "其他"]
+# Service items (the shop's price-list names). Seeded once; add / rename / delete /
+# reorder in the app. No prices: the amount is typed for each wash.
+DEFAULT_SERVICES = [
+    "泡沫外表洗車", "基礎洗車打腊（全套）", "深層美容式精緻洗車", "3D、漂白美容",
+    "皮椅鍍膜", "皮椅內裝保養", "內裝皮椅美容護理", "頂級結晶奈米鍍膜", "晶鑽鍍膜",
+    "極致鍍膜", "頂級美容", "鏡面美容", "玻璃鍍膜（前擋）", "鋼圈鍍膜", "柏油處理",
+    "玻璃油膜清潔處理", "其他",
+]
 
 # UI scaling (same system as the auto-repair app): at REF_WIDTH x REF_HEIGHT
 # the base font is REF_FONT_PT; 小/中/大/特大 multiply it. Calibrated on Windows.
