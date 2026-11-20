@@ -73,3 +73,13 @@ Format: `## YYYY-MM-DD — title` then What happened / Cause / Rule.
 - Early commits (fa742e1, 5f1c239) shipped a database.db with fake data
   (816,919 / 100,002 rows): never reuse a committed database as a fixture; it was
   useful locally as a stress test and exposed the need for `MAX_ROWS`.
+
+## 2026-11-20 — Never commit database files; rewriting history safely
+- Early commits contained database.db (fake data, 44 MB). Removal = history rewrite.
+- How it was done safely: work in a separate `git clone --mirror`; fetch unpushed
+  branches into it first so they are rewritten consistently; snapshot every
+  branch's file list + commit count; `git filter-repo --path database.db
+  --invert-paths`; verify 0 objects left and identical files per branch; push
+  `refs/heads/*` with --force; verify from a fresh clone; never touch the owner's
+  working clone with uncommitted work. `.gitignore` already excludes *.db.
+- Branch names: `x/y` cannot coexist with a branch named `x`.

@@ -3,7 +3,7 @@
 - 2025 — Offline single-exe app for an elderly car wash owner; Traditional Chinese.
 - 2025 — Do not change the search/add/edit/delete flow; no dropdowns; no routine
   popups (fading status); no money on the main screen; big everything.
-- 2026-11-20 — Redesign on branch `refactor/autorepair-design` (from
+- 2026-11-20 — Redesign on branch `autorepair-design` (from
   `feat/business-intelligence-expansion`), same design system as autorepair_db:
   "no need to be fancy, but easy and elegant". Features too hard for elders may be
   removed or simplified (brand grid wraps instead of scrolling; report uses
@@ -31,3 +31,8 @@
   the database only so old app versions keep working; nothing reads or writes it.
 - 2026-11-20 — Restore must consume any backup that follows one of our schemas,
   whatever the file name. All files the app creates have Chinese names.
+- 2026-11-20 — Repo history rewritten (owner request): the fake database.db files
+  committed on 2025-03-02 were removed from every commit with git filter-repo and all
+  branches force-pushed (28 MB -> 1.9 MB). Old clones must be re-cloned. The
+  redesign branch is `autorepair-design` (a branch named `refactor` exists, so
+  `refactor/...` names are impossible).
