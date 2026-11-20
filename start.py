@@ -69,6 +69,15 @@ def main() -> int:
     from app.ui.main_window import MainWindow
     win = MainWindow(db)
     win.showMaximized()
+
+    def hourly_backup():  # the PC may stay on for days: make the new day's backup too
+        try:
+            backup.daily_auto_backup(db, config.auto_backup_dir())
+        except Exception as e:  # noqa: BLE001
+            _excepthook(type(e), e, e.__traceback__)
+    backup_timer = QtCore.QTimer()
+    backup_timer.timeout.connect(hourly_backup)
+    backup_timer.start(60 * 60 * 1000)
     rc = app.exec_()
     db.close()
     return rc

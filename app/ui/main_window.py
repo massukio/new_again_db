@@ -91,6 +91,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.group.button(index).setChecked(True)
         self.stack.setCurrentIndex(index)
         self.pages[index][1].refresh()
+        if index == 0:
+            self.customers_page.focus_search()
 
     def _on_restored(self):
         self.apply_font_size(force=True)  # the backup may carry another font size

@@ -185,7 +185,7 @@ class ReportPage(Page):
         self.break_card.title.setText("每月明細" if bucket == "month" else "每日明細")
         self.t_break.setHorizontalHeaderItem(0, QtWidgets.QTableWidgetItem("月份" if bucket == "month" else "日期"))
         fill_table(self.t_break, [
-            (f"{int(x['period'][5:7])} 月" if bucket == "month" else fmt_date(x["period"])[5:],
+            (f"{x['period'][5:7].lstrip('0')} 月" if bucket == "month" else fmt_date(x["period"])[5:],
              f"{x['visits']:,}", fmt_money(x["total"])) for x in r["buckets"]], right=(1, 2))
         recs = self.db.report_records(a, b, self.RECORD_LIMIT)
         fill_table(self.t_rec, [(x["wash_date"][5:].replace("-", "/"), x["plate"], fmt_money(x["amount"]), x["note"])

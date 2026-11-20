@@ -12,3 +12,12 @@
 - 2026-11-20 — Daily auto backup, Chinese names for every file/folder the app creates.
 - 2026-11-20 — Must restore data from old versions (.db and .sql backups, all old schemas).
 - 2026-11-20 — Version 2.0.0 for the redesign; MIT; author Sukio Lin; created 2025.
+- 2026-11-20 — Main use: look up a plate to read the phone number and call the
+  customer; add/edit plates with phones. A plate can have several numbers; numbers
+  change or expire. → phone as prominent as the plate, newest number first,
+  「目前選擇」 box shows plate + phone large, 修改資料 = change number, 刪除資料 on a
+  row = remove only that number (history stays with the plate).
+- 2026-11-20 — 備註 is rarely used in real life: narrow last column (full text on
+  hover and in 客戶資訊), "no need such big room".
+- 2026-11-20 — Duplicate-plate question answered 「不要」 keeps the typed data and
+  focuses the phone box (old app cleared everything). ESC in 修改資料 backs out.

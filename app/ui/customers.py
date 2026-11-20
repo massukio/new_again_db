@@ -19,7 +19,7 @@ from PyQt5.QtCore import pyqtSignal
 from app import config
 from app.brands import BRANDS, brand_logo
 from app.db import Database, DataError, format_phone
-from app.ui.style import sized
+from app.ui.style import px, sized
 from app.ui.widgets import (Card, Segmented, Tile, ask, button, divider, fill_table, fit_to_screen,
                             fmt_date, fmt_money, label, make_table, warn)
 
@@ -31,7 +31,10 @@ def last_visit_text(iso: Optional[str]):
     """('3天前', color) for the 上次來店 column."""
     if not iso:
         return "無紀錄", "#9AA0A6"
-    days = (_dt.date.today() - _dt.date.fromisoformat(iso)).days
+    try:  # old backups may contain other date spellings; never crash on them
+        days = (_dt.date.today() - _dt.date.fromisoformat(str(iso)[:10].replace("/", "-"))).days
+    except ValueError:
+        return str(iso), None
     if days <= 0:
         return "今天", "#2F7D50"
     if days == 1:
@@ -62,6 +65,32 @@ def phone_edit(placeholder: str = "電話號碼") -> QtWidgets.QLineEdit:
     e.setValidator(QtGui.QRegExpValidator(PHONE_RE, e))
     e.setMaxLength(config.PHONE_MAX)
     return e
+
+
+class SideColumn(QtWidgets.QScrollArea):
+    """Vertical-only scroll area that is always exactly as wide as its content
+    (so nothing is clipped at any font size); scrolls only on very short windows."""
+
+    def __init__(self, inner: QtWidgets.QWidget):
+        super().__init__()
+        self.setWidgetResizable(True)
+        self.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
+        self.setWidget(inner)
+        inner.installEventFilter(self)
+
+    def sizeHint(self):
+        w = self.widget().minimumSizeHint().width() + self.verticalScrollBar().sizeHint().width()
+        return QtCore.QSize(max(w, px(220)), super().sizeHint().height())
+
+    def minimumSizeHint(self):
+        return QtCore.QSize(self.sizeHint().width(), 0)
+
+    def eventFilter(self, obj, event):
+        if event.type() in (QtCore.QEvent.LayoutRequest, QtCore.QEvent.StyleChange, QtCore.QEvent.FontChange):
+            self.updateGeometry()
+        return super().eventFilter(obj, event)
 
 
 class Toast(QtWidgets.QLabel):
@@ -101,12 +130,15 @@ class CustomersPage(QtWidgets.QWidget):
         card.add_header_widget(self.toast)
         self.count_label = label("", "muted", wrap=False)
         card.add_header_widget(self.count_label)
-        self.table = make_table(["車牌號碼", "電話號碼", "備註", "上次來店"])
+        # 備註 is rarely used: a narrow column at the end (full text on hover / in 客戶資訊)
+        self.table = make_table(["車牌號碼", "電話號碼", "上次來店", "備註"])
         hh = self.table.horizontalHeader()
-        hh.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
-        hh.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
-        hh.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
-        hh.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeToContents)
+        hh.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        hh.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
+        hh.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeToContents)
+        hh.setSectionResizeMode(3, QtWidgets.QHeaderView.Fixed)
+        self.table.setTextElideMode(QtCore.Qt.ElideRight)
+        self.table.itemSelectionChanged.connect(self._show_selected)
         self.table.doubleClicked.connect(lambda _i: self.show_info())
         sized(self.table, "setMinimumHeight", 200)
         card.add(self.table, 1)
@@ -133,8 +165,10 @@ class CustomersPage(QtWidgets.QWidget):
 
         # ---- right: actions
         actions = Card("")
-        sized(actions, "setMinimumWidth", 230)
-        sized(actions, "setMaximumWidth", 300)
+        actions.add(label("目前選擇", "tilecap", wrap=False))
+        self.selected_label = label("", "selected", wrap=False)
+        self.selected_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        actions.add(self.selected_label)
         for text, role, slot in [("＋ 新增資料", "primary", self.add_customer),
                                  ("修改資料", "big", self.edit_customer),
                                  ("刪除資料", "bigdanger", self.delete_customer)]:
@@ -144,8 +178,7 @@ class CustomersPage(QtWidgets.QWidget):
                                  ("客戶資訊", "big", self.show_info)]:
             actions.add(button(text, role, slot))
         actions.lay.addStretch(1)
-        actions.add(label("先在左邊點一下要處理的車，再按上面的按鈕。", "hint"))
-        outer.addWidget(actions)
+        outer.addWidget(SideColumn(actions))
 
         # typing filters the list (after a short pause)
         self._timer = QtCore.QTimer(self)
@@ -181,6 +214,10 @@ class CustomersPage(QtWidgets.QWidget):
         """ESC / 清除: empty the search and start again."""
         self.set_mode("plate")
 
+    def focus_search(self):
+        """Put the cursor back in the search box (after dialogs / tab switches)."""
+        (self.part1 if self.mode == "plate" else self.phone).setFocus()
+
     def eventFilter(self, obj, event):
         if event.type() == QtCore.QEvent.KeyPress and event.key() == QtCore.Qt.Key_Escape:
             self.reset()
@@ -203,20 +240,44 @@ class CustomersPage(QtWidgets.QWidget):
         else:
             rows = self.db.list_customers(phone=self.phone.text())
         self.rows = rows
+        self.table.clearSelection()
+        self.table.horizontalHeader().resizeSection(3, px(150))  # narrow, scales with the UI
         fill_table(self.table, [(("★ " if r["vip"] else "") + r["plate"], format_phone(r["phone"]),
-                                 r["note"], last_visit_text(r["last_visit"])[0]) for r in rows],
+                                 last_visit_text(r["last_visit"])[0], r["note"]) for r in rows],
                    row_data=[r["id"] for r in rows], fit_rows=False)
+        bold = QtGui.QFont(self.table.font())
+        bold.setBold(True)
+        selected_row = -1
         for i, r in enumerate(rows):
+            self.table.item(i, 0).setFont(bold)
+            self.table.item(i, 1).setFont(bold)  # the number they look up to call
             color = last_visit_text(r["last_visit"])[1]
             if color:
-                self.table.item(i, 3).setForeground(QtGui.QColor(color))
+                self.table.item(i, 2).setForeground(QtGui.QColor(color))
             if r["note"]:
-                self.table.item(i, 2).setToolTip(r["note"])
+                self.table.item(i, 3).setToolTip(r["note"])
             if r["id"] == select_id:
-                self.table.selectRow(i)
+                selected_row = i
+        if selected_row >= 0:
+            self.table.selectRow(selected_row)
+            self.table.scrollToItem(self.table.item(selected_row, 0), QtWidgets.QAbstractItemView.PositionAtCenter)
+        self._show_selected()
         total = self.db.count_customers()
         self.count_label.setText(f"共 {len(rows):,} 筆" if len(rows) == total
                                  else f"找到 {len(rows):,} 筆（共 {total:,} 筆）")
+
+    def _show_selected(self):
+        cid = self.selected_id(quiet=True)
+        c = next((r for r in getattr(self, "rows", []) if r["id"] == cid), None) if cid is not None else None
+        if c:
+            phone = format_phone(c["phone"]) or "（沒有電話）"
+            self.selected_label.setText(f"{c['plate']}\n{phone}")
+            self.selected_label.setProperty("empty", False)
+        else:
+            self.selected_label.setText("還沒有選擇\n請點表格中的一行")
+            self.selected_label.setProperty("empty", True)
+        self.selected_label.style().unpolish(self.selected_label)
+        self.selected_label.style().polish(self.selected_label)
 
     def selected_id(self, quiet: bool = False) -> Optional[int]:
         row = self.table.currentRow()
@@ -237,6 +298,7 @@ class CustomersPage(QtWidgets.QWidget):
         if dlg.saved_ids:
             self.refresh(select_id=dlg.saved_ids[-1])
             self.data_changed.emit()
+        self.focus_search()
 
     def edit_customer(self):
         c = self.selected_customer()
@@ -247,19 +309,27 @@ class CustomersPage(QtWidgets.QWidget):
             self.refresh(select_id=c["id"])
             self.toast.show_text(f"✓ 已修改 {dlg.saved_plate}")
             self.data_changed.emit()
+        self.focus_search()
 
     def delete_customer(self):
         c = self.selected_customer()
         if not c:
             return
         phone = format_phone(c["phone"]) or "（沒有電話）"
-        if not ask(self, f"確定要刪除這筆資料嗎？\n\n車牌：{c['plate']}\n電話：{phone}",
-                   "刪除資料", yes="確定刪除", no="不要刪除"):
-            return
-        self.db.delete_customer(c["id"])
-        self.refresh()
-        self.toast.show_text(f"已刪除 {c['plate']}")
-        self.data_changed.emit()
+        others = [p for p in self.db.plate_phones(c["part1"], c["part2"]) if p["id"] != c["id"]]
+        if others:
+            keep = "、".join(format_phone(p["phone"]) or "（沒有電話）" for p in others)
+            text = (f"要刪除 {c['plate']} 的電話 {phone} 嗎？\n\n"
+                    f"只會刪除這個號碼。\n這台車的其他電話（{keep}）和消費紀錄都會保留。")
+        else:
+            text = (f"確定要刪除這筆資料嗎？\n\n車牌：{c['plate']}\n電話：{phone}\n\n"
+                    f"這台車的消費紀錄會保留在營收報表裡。")
+        if ask(self, text, "刪除資料", yes="確定刪除", no="不要刪除"):
+            self.db.delete_customer(c["id"])
+            self.refresh()
+            self.toast.show_text(f"已刪除 {c['plate']} {phone}")
+            self.data_changed.emit()
+        self.focus_search()
 
     def record_wash(self):
         c = self.selected_customer()
@@ -270,6 +340,7 @@ class CustomersPage(QtWidgets.QWidget):
             self.refresh(select_id=c["id"])
             self.toast.show_text(f"✓ {c['plate']} 已記錄 {fmt_money(dlg.amount)}")
             self.data_changed.emit()
+        self.focus_search()
 
     def show_info(self):
         c = self.selected_customer()
@@ -278,6 +349,7 @@ class CustomersPage(QtWidgets.QWidget):
         CustomerInfoDialog(self.db, c, parent=self).exec_()
         self.refresh(select_id=c["id"])
         self.data_changed.emit()
+        self.focus_search()
 
 
 # ============================================================== brand chips
@@ -387,9 +459,14 @@ class CustomerDialog(QtWidgets.QDialog):
         plate_row.addStretch(1)
         form.addLayout(plate_row, 0, 1)
         form.addWidget(key("電話號碼"), 1, 0)
+        phone_row = QtWidgets.QHBoxLayout()
         self.phone = phone_edit("可不填")
         sized(self.phone, "setMaximumWidth", 420)
-        form.addWidget(self.phone, 1, 1)
+        phone_row.addWidget(self.phone, 1)
+        if editing:
+            phone_row.addWidget(label("換號碼：直接改成新的號碼", "muted", wrap=False))
+        phone_row.addStretch(1)
+        form.addLayout(phone_row, 1, 1)
         form.addWidget(key("備註"), 2, 0)
         self.note = QtWidgets.QLineEdit()
         self.note.setPlaceholderText("可不填")
@@ -439,7 +516,11 @@ class CustomerDialog(QtWidgets.QDialog):
             else:
                 self.save()
         elif event.key() == QtCore.Qt.Key_Escape:
-            self.clear()
+            empty = not any(w.text() for w in (self.part1, self.part2, self.phone, self.note))
+            if self.customer is not None or empty:
+                self.reject()  # editing: ESC backs out without touching the customer
+            else:
+                self.clear()  # adding: ESC empties the form (as in the old app)
         else:
             super().keyPressEvent(event)
 
@@ -456,9 +537,13 @@ class CustomerDialog(QtWidgets.QDialog):
             if self.customer is None:
                 if (self.db.plate_exists(p1, p2) and not self.db.plate_phone_exists(p1, p2, phone)
                         and p1 and p2):
-                    if not ask(self, f"車牌 {p1.upper()}-{p2.upper()} 已經有資料了，但電話不一樣。\n\n要再新增一筆嗎？",
-                               "車牌已經存在", yes="要新增", no="不要"):
-                        self.clear()
+                    existing = "、".join(format_phone(x["phone"]) or "（沒有電話）"
+                                         for x in self.db.plate_phones(p1, p2))
+                    if not ask(self, f"車牌 {p1.upper()}-{p2.upper()} 已經有電話：{existing}\n\n"
+                                     f"要再加一個電話號碼嗎？\n（舊的號碼會保留；不用的號碼可以之後刪除）",
+                               "這台車已經有資料", yes="加這個號碼", no="不要"):
+                        self.phone.setFocus()  # keep what was typed; usually the phone needs fixing
+                        self.phone.selectAll()
                         return
                 cid = self.db.add_customer(p1, p2, phone, note, brand)
                 self.saved_ids.append(cid)
@@ -574,7 +659,8 @@ class CustomerInfoDialog(QtWidgets.QDialog):
         self.vip_btn = button("", slot=self.toggle_vip)
         head.addWidget(self.vip_btn)
         top.add(head)
-        details = [f"電話 {format_phone(customer['phone'])}" if customer["phone"] else "沒有電話"]
+        phones = [format_phone(p["phone"]) for p in db.plate_phones(customer["part1"], customer["part2"]) if p["phone"]]
+        details = [f"電話 {'、'.join(phones)}" if phones else "沒有電話"]
         if customer["brand"]:
             details.append(customer["brand"])
         if customer["note"]:
@@ -604,9 +690,11 @@ class CustomerInfoDialog(QtWidgets.QDialog):
         row.addStretch(1)
         close = button("關閉", "primary", self.accept)
         sized(close, "setMinimumWidth", 220)
+        close.setDefault(True)  # Enter closes; never toggles VIP by accident
         row.addWidget(close)
         lay.addLayout(row)
         self.load()
+        close.setFocus()
         fit_to_screen(self, 980, 760)
 
     def load(self):

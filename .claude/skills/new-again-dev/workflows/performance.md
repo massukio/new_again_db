@@ -5,10 +5,10 @@ dev machine with ~5× headroom for old shop PCs:
 
 | Action | Budget | Last measured (2026-11-20) |
 | --- | --- | --- |
-| Open 客戶資料 (3,000 rows) | < 150 ms | 99 ms |
-| Type in search (filter) | < 100 ms | 80 ms |
+| Open 客戶資料 (3,000 rows) | < 150 ms | 50 ms |
+| Type in search (filter) | < 100 ms | 68 ms |
 | Open 營收報表 / switch to year | < 100 ms | 37 / 43 ms |
-| Startup | < 1 s | 0.64 s |
+| Startup | < 1 s | 0.40 s |
 | Data: list all customers + last visit | < 30 ms | 14 ms |
 
 Rules: fill tables with `fill_table` (`fit_rows=False` for one-line rows; it

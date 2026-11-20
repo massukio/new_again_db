@@ -240,3 +240,55 @@ def test_fresh_install_names(tmp_path, monkeypatch):
     monkeypatch.delenv("NEWAGAIN_DATA_DIR", raising=False)
     monkeypatch.setattr(config, "app_dir", lambda: str(tmp_path))
     assert config.db_path() == str(tmp_path / "再新洗車資料" / "洗車資料.db")
+
+
+def test_several_numbers_newest_first(db):
+    a = db.add_customer("CAR", "1", "0911000000")
+    b = db.add_customer("CAR", "1", "0922000000")
+    db.add_wash("CAR", "1", 300, "2026-11-01")
+    assert [c["phone"] for c in db.list_customers(part1="CAR")] == ["0922000000", "0911000000"]
+    assert [p["id"] for p in db.plate_phones("car", "1")] == [b, a]
+    db.delete_customer(a)  # old number expired: history stays with the plate
+    assert db.customer_summary("CAR", "1")["visits"] == 1
+    assert [p["phone"] for p in db.plate_phones("CAR", "1")] == ["0922000000"]
+
+
+def test_legacy_dashed_and_null_phones(tmp_path):
+    p = tmp_path / "database.db"
+    make_db(p, ORIGINAL_SCHEMA.replace("'0912345678'", "'0912-345-678'"))
+    d = Database(str(p))
+    c = d.list_customers(part1="ABC")[0]
+    assert c["phone"] == "0912345678"                      # edit dialog gets digits, not truncated
+    assert d.list_customers(phone="0912345")[0]["plate"] == "ABC-1234"
+    assert d.plate_phone_exists("ABC", "1234", "0912345678")
+    with pytest.raises(DataError):
+        d.add_customer("ABC", "1234", "0912345678")         # same number in another spelling
+    d.close()
+
+
+def test_locked_database_is_not_set_aside(tmp_path):
+    p = tmp_path / "洗車資料.db"
+    Database(str(p)).close()
+    holder = sqlite3.connect(str(p))
+    holder.execute("BEGIN EXCLUSIVE")
+    import app.db as appdb
+    orig = appdb.Database.__init__
+
+    def short_timeout(self, path):
+        self.path = path
+        self.conn = sqlite3.connect(path, timeout=0.1)
+        self.conn.row_factory = sqlite3.Row
+        try:
+            appdb._create_schema(self.conn)
+        except sqlite3.Error:
+            self.conn.close()
+            raise
+    appdb.Database.__init__ = short_timeout
+    try:
+        with pytest.raises(sqlite3.OperationalError):
+            open_database(str(p))
+    finally:
+        appdb.Database.__init__ = orig
+        holder.rollback()
+        holder.close()
+    assert p.exists() and not list(tmp_path.glob("無法開啟的資料_*"))

@@ -111,15 +111,20 @@ def _create_schema(conn: sqlite3.Connection) -> None:
 
 
 _CUSTOMER_SELECT = (
-    "SELECT p.id, p.part1, p.part2, p.phone_number AS phone, COALESCE(p.note, '') AS note, "
+    "SELECT p.id, p.part1, p.part2, COALESCE(p.phone_number, '') AS phone, COALESCE(p.note, '') AS note, "
     "COALESCE(p.brand, '') AS brand, COALESCE(p.vip, 0) AS vip, "
     "(SELECT MAX(w.wash_date) FROM wash_records w "
     " WHERE w.plate_part1 = p.part1 AND w.plate_part2 = p.part2) AS last_visit "
     "FROM plate_info p")
 
 
+# old versions may have stored phones with dashes/spaces: compare digits only
+PHONE_DIGITS = "REPLACE(REPLACE(COALESCE(phone_number, ''), '-', ''), ' ', '')"
+
+
 def _customer(row) -> dict:
     d = dict(row)
+    d["phone"] = clean_phone(d["phone"])
     d["plate"] = f"{d['part1']}-{d['part2']}"
     d["vip"] = bool(d["vip"])
     return d
@@ -167,10 +172,16 @@ class Database:
             sql += " AND p.part2 LIKE ?"
             args.append(f"%{p2}%")
         if ph:
-            sql += " AND p.phone_number LIKE ?"
+            sql += " AND " + PHONE_DIGITS.replace("phone_number", "p.phone_number") + " LIKE ?"
             args.append(f"%{ph}%")
-        sql += " ORDER BY p.part1, p.part2, p.phone_number"
+        sql += " ORDER BY p.part1, p.part2, p.id DESC"  # a plate's newest phone number first
         return [_customer(r) for r in self.conn.execute(sql, args)]
+
+    def plate_phones(self, part1: str, part2: str) -> List[dict]:
+        """All phone rows of one plate, newest first (a car can have several numbers)."""
+        return [dict(r) for r in self.conn.execute(
+            f"SELECT id, {PHONE_DIGITS} AS phone, COALESCE(note, '') AS note FROM plate_info "
+            "WHERE part1=? AND part2=? ORDER BY id DESC", (clean_part(part1), clean_part(part2)))]
 
     def get_customer(self, customer_id: int) -> Optional[dict]:
         row = self.conn.execute(_CUSTOMER_SELECT + " WHERE p.id=?", (customer_id,)).fetchone()
@@ -185,7 +196,7 @@ class Database:
 
     def plate_phone_exists(self, part1: str, part2: str, phone: str,
                            exclude_id: Optional[int] = None) -> bool:
-        sql = "SELECT 1 FROM plate_info WHERE part1=? AND part2=? AND phone_number=?"
+        sql = f"SELECT 1 FROM plate_info WHERE part1=? AND part2=? AND {PHONE_DIGITS}=?"
         args = [clean_part(part1), clean_part(part2), clean_phone(phone)]
         if exclude_id is not None:
             sql += " AND id<>?"
@@ -452,8 +463,15 @@ def open_database(path: str) -> Tuple[Database, Optional[str]]:
     from app.config import UNREADABLE_PREFIX
     try:
         return Database(path), None
-    except sqlite3.DatabaseError:
+    except sqlite3.OperationalError:
+        raise  # locked / read-only / disk problem: NOT corruption - never move the data aside
+    except sqlite3.DatabaseError as e:
+        if "not a database" not in str(e) and "malformed" not in str(e):
+            raise
         stamp = time.strftime("%Y%m%d_%H%M%S")
         aside = os.path.join(os.path.dirname(path), f"{UNREADABLE_PREFIX}{stamp}.db")
         os.replace(path, aside)
+        for suffix in ("-journal", "-wal", "-shm"):  # keep companions with their database
+            if os.path.exists(path + suffix):
+                os.replace(path + suffix, aside + suffix)
         return Database(path), aside

@@ -60,7 +60,9 @@ def button(text: str, role: Optional[str] = None, slot=None) -> QtWidgets.QPushB
     if role:
         b.setProperty("role", role)
     b.setCursor(QtCore.Qt.PointingHandCursor)
-    b.setFocusPolicy(QtCore.Qt.NoFocus if role in ("item", "nav", "seg", "link") else QtCore.Qt.StrongFocus)
+    b.setFocusPolicy(QtCore.Qt.NoFocus if role in ("item", "nav", "seg", "link", "brand") else QtCore.Qt.StrongFocus)
+    # never let Enter "click" a button the user cannot see is focused; dialogs handle Enter themselves
+    b.setAutoDefault(False)
     if slot is not None:
         b.clicked.connect(slot)
     return b
@@ -187,7 +189,7 @@ def _box(parent, icon, title, text, buttons):
         b = box.addButton(t, r)
         b.setCursor(QtCore.Qt.PointingHandCursor)
         created.append(b)
-    box.setDefaultButton(created[-1])
+    box.setDefaultButton(created[0])  # Enter = the safe choice (不要刪除 / 取消 / 知道了)
     box.exec_()
     return created.index(box.clickedButton()) if box.clickedButton() in created else -1
 

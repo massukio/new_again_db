@@ -24,3 +24,22 @@ Format: `## YYYY-MM-DD — title` then What happened / Cause / Rule.
 ## 2026-11-20 — Lessons carried over from autorepair_db
 - See that repo's `knowledge/lessons.md` (table fill O(n²), offscreen modal hangs,
   wrap-label heights, Windows VM automation, .bat CRLF/ASCII, executescript commits).
+
+## 2026-11-20 — State the user cannot see (owner: "I click the table but see nothing selected")
+- Cause: the stylesheet styled `QTableWidget::item` (padding, border) but had no
+  `::item:selected` rule, so Qt drew only a faint tint. Related, found by review:
+  styled buttons draw no focus ring; QDialog buttons are `autoDefault`, so Enter
+  "clicked" whatever had focus (a brand chip, the VIP toggle, 取消); confirmation
+  boxes defaulted to the destructive button (確定刪除 / 確定還原).
+- Rules (promoted to design-system.md): every interactive state needs an explicit,
+  strong style — `::item:selected` (solid accent + white bold), `:hover`,
+  `QPushButton:focus` amber ring (placed last in the stylesheet so it wins);
+  `button()` sets `setAutoDefault(False)`; message boxes default to the SAFE
+  choice; dialogs set an explicit default/focus (e.g. 客戶資訊 → 關閉).
+
+## 2026-11-20 — PyQt5 aborts on exceptions inside Qt callbacks
+- What happened: test run ended with "Fatal Python error: Aborted".
+- Cause: an exception in a slot/event handler with no `sys.excepthook` → PyQt5 calls
+  qFatal. (The app's `start.py` installs a hook that logs to 錯誤紀錄.log.)
+- Rule: tests install a hook that records such exceptions and fails the test
+  (`tests/conftest.py`); stop timers before closing the database in fixtures.

@@ -18,7 +18,7 @@ from app.config import WASH_TYPES  # noqa: E402
 from app.db import Database, DataError  # noqa: E402
 
 PRICES = {"一般洗車": (200, 400), "精緻洗車": (500, 900), "美容": (1200, 3500), "其他": (100, 600)}
-NOTES = ["老客戶", "要打蠟", "內裝要吸", "週末才來", "公司車", "", "", "", "", ""]
+NOTES = ["老客戶", "要打蠟", "內裝要吸", "公司車"] + [""] * 36  # notes are rare in real shops
 
 
 def main():

@@ -95,9 +95,14 @@ def _adopt_legacy_database(legacy_dir: str, data_folder: str) -> None:
     new_db = os.path.join(data_folder, DB_FILENAME)
     if not os.path.exists(old_db) or os.path.exists(new_db):
         return
-    if _rename(old_db, new_db) and os.path.exists(old_db + "-journal"):
-        if not _rename(old_db + "-journal", new_db + "-journal"):
-            _rename(new_db, old_db)  # keep the pair together
+    if not _rename(old_db, new_db):
+        return
+    for suffix in ("-journal", "-wal", "-shm"):  # companions must stay with their database
+        if os.path.exists(old_db + suffix) and not _rename(old_db + suffix, new_db + suffix):
+            for s2 in ("-journal", "-wal", "-shm"):
+                _rename(new_db + s2, old_db + s2)
+            _rename(new_db, old_db)
+            return
 
 
 def data_dir() -> str:

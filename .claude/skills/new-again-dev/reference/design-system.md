@@ -6,13 +6,18 @@ and elegant"; remove anything too hard for an elder.
 
 ## The memorized flow (do not change)
 
-- Main screen: list on the left, action buttons on the right
+- Main job: find a plate and read its phone number to call the customer, so
+  plate and phone are bold and large; 備註 is a narrow last column.
+- Main screen: list on the left (車牌號碼, 電話號碼, 上次來店, 備註), on the right the
+  「目前選擇」 box (plate + phone) then the action buttons
   (＋ 新增資料, 修改資料, 刪除資料 | 記錄消費, 客戶資訊), search under the list:
   車牌查詢 (前半 — 後半) / 電話查詢, filtering while typing.
 - Enter moves to the next box; ESC clears the search and focuses 前半.
 - 新增資料 stays open after saving (clears itself) to enter the next car.
   Same plate + same phone → refused; same plate + other phone → ask
-  (要新增 / 不要 → clears). Edit: plate that belongs to another row → refused.
+  (加這個號碼 / 不要 → keeps the typing, focuses the phone). Edit: plate that belongs
+  to another row → refused. ESC: add = clear (close when empty), edit = back out.
+- After any dialog or tab switch the cursor goes back to the search box.
 - 記錄消費: type chips (一般洗車/精緻洗車/美容/其他) + amount + optional note,
   dated today; Enter amount → note → save; ESC closes.
 - 客戶資訊 on button or double-click: totals, history, ★ VIP toggle,
@@ -44,3 +49,14 @@ hint, plate, badge, toast, toastwarn, dash, info …), `Toast`, `BrandGrid`
 `tools/screenshot.py` at 1070×540, 1280×760, 1920×1040, 800×480 + dialogs; then
 the real exe on Windows (fonts render smaller there; the offscreen renderer
 pretends the screen is 800×600, so dialogs look cramped in screenshots only).
+
+## Visible state (mandatory)
+
+- Selected table row: solid accent background, white bold text (`::item:selected`);
+  hover tint on rows. Anything the user must click first (a row) needs a visible
+  confirmation of what is selected (carwash: 「目前選擇」 box).
+- Keyboard focus: amber ring on every focusable button; inputs show an accent border.
+- No hidden Enter behaviour: `button()` turns off autoDefault; dialogs that want
+  Enter to save handle it in `keyPressEvent`; message boxes default to the safe button.
+- Test it: `tests/test_ui.py` style tests click, press Enter/ESC and assert the
+  visible state, not only the data.
