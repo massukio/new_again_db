@@ -55,7 +55,7 @@ def test_selection_is_visible_and_drives_the_charge_panel(env, qapp):
     win, page, db, _ = env
     assert not page.charge.save_btn.isEnabled() and page.charge.hint.isVisible()
     assert "[role]:disabled" in qapp.styleSheet()  # disabled buttons must look disabled
-    rect = page.table.visualItemRect(page.table.item(1, 0))
+    rect = page.table.row_rect(1)
     QTest.mouseClick(page.table.viewport(), QtCore.Qt.LeftButton, pos=rect.center())
     settle(qapp)
     assert page.table.selectionModel().isRowSelected(1, QtCore.QModelIndex())
@@ -87,7 +87,7 @@ def test_search_one_result_selects_it_and_charge(env, qapp):
     assert w["amount"] == 650 and w["note"] == f"泡沫外表洗車、{names[5]} - 老客人"
     assert page.toast.isVisible() and "已記錄" in page.toast.text()
     assert ch.amount.text() == "" and not ch.items.selected_ids()   # ready for the next car
-    assert page.table.item(0, 2).text() == "今天"
+    assert page.table.cell_text(0, 2) == "今天"
     # amount is required
     ch.save()
     assert db.customer_summary("XYZ", "5555")["visits"] == 1
@@ -108,7 +108,7 @@ def test_search_filters_and_esc_resets(env, qapp):
     page.set_mode("phone")
     QTest.keyClicks(page.phone, "0922")
     page.refresh()
-    assert page.table.rowCount() == 1 and page.table.item(0, 0).text() == "XYZ-5555"
+    assert page.table.rowCount() == 1 and page.table.cell_text(0, 0) == "XYZ-5555"
 
 
 def test_actions_need_a_selection(env, qapp):
@@ -256,4 +256,14 @@ def test_no_vip_marks(env, qapp):
     win, page, db, _ = env
     db.conn.execute("UPDATE plate_info SET vip=1")  # old databases may still have VIP flags
     page.refresh()
-    assert all("★" not in page.table.item(i, 0).text() for i in range(page.table.rowCount()))
+    assert all("★" not in page.table.cell_text(i, 0) for i in range(page.table.rowCount()))
+
+
+def test_selected_chip_keeps_its_size(env, qapp):
+    win, page, db, _ = env
+    page.table.selectRow(0)
+    chip = page.charge.items.buttons[1]
+    before_text, before_w = chip.text(), chip.sizeHint().width()
+    chip.click()
+    qapp.processEvents()
+    assert chip.isChecked() and chip.text() == before_text and chip.sizeHint().width() == before_w

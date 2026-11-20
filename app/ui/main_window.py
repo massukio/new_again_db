@@ -90,7 +90,11 @@ class MainWindow(QtWidgets.QMainWindow):
         """Switch page. Pages refresh when shown, so they are never stale."""
         self.group.button(index).setChecked(True)
         self.stack.setCurrentIndex(index)
-        self.pages[index][1].refresh()
+        page = self.pages[index][1]
+        if page is self.customers_page:
+            page.refresh(force=False)  # skip when nothing changed (fast tab switching)
+        else:
+            page.refresh()
         if index == 0:
             self.customers_page.focus_search()
 
@@ -104,9 +108,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def apply_font_size(self, force: bool = False):
         """Pick the font size from the window size and the user's 小/中/大/特大 choice."""
-        if self.isVisible():
+        if self.isVisible() and not self.isMaximized():
             w, h = self.width(), self.height()
-        else:
+        else:  # maximized (the normal case) or not shown yet: same numbers -> no second restyle
             geo = QtWidgets.QApplication.primaryScreen().availableGeometry()
             w, h = geo.width(), geo.height()
         factor = config.FONT_SCALES[self.settings_page.font_size_name()]

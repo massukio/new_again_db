@@ -50,3 +50,16 @@ Format: `## YYYY-MM-DD — title` then What happened / Cause / Rule.
 - Rule: size the important columns to content and let the least important one
   (備註) stretch; drop titles the tab already shows; use a flow layout for chips of
   very different lengths (`ChipFlow`). Check 1070×540 and 1280×760 every time.
+
+## 2026-11-20 — "It feels laggy" on Windows, fast on the Mac
+- What happened: the owner felt lag; Mac profiling showed nothing alarming.
+- Cause: Windows (VM) runs Qt 5-10x slower: QTableWidget with 12,000 items rebuilt
+  per keystroke/save/tab switch (~0.3 s), and a full restyle (~1 s) right after
+  start-up when the window maximized.
+- Rule: profile interactions ON WINDOWS with `tools/profile_ui.py`; model/view for
+  big lists; skip refreshes when nothing changed; avoid restyles. Promoted to
+  `workflows/performance.md`.
+
+## 2026-11-20 — Selected chips must not change size
+- A ✓ prefix and bold on selected chips made them wider, so wrapped chips jumped
+  to another line. Rule: show selection by colour only (both apps).

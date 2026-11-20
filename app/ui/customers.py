@@ -156,7 +156,6 @@ class ChipFlow(QtWidgets.QWidget):
             b.setCheckable(True)
             b.setProperty("item_id", it["id"])
             b.setProperty("item_name", it["name"])
-            b.toggled.connect(lambda on, btn=b: btn.setText(("✓ " if on else "") + btn.property("item_name")))
             b.setChecked(it["id"] in selected)
             b.setToolTip("按右鍵可以改名或刪除")
             b.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
@@ -206,6 +205,131 @@ class ChipFlow(QtWidgets.QWidget):
         self.set_selected([])
 
 
+class CustomerModel(QtCore.QAbstractTableModel):
+    """Customer list data for a QTableView. Only the visible rows are ever drawn,
+    so refreshing 3,000 customers costs the same as refreshing 15."""
+
+    HEADERS = ["車牌號碼", "電話號碼", "上次來店", "備註"]
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.rows = []
+        self.cells = []
+        self._colors = {}
+
+    def set_rows(self, rows):
+        self.beginResetModel()
+        self.rows = rows
+        self.cells = []
+        for r in rows:
+            text, color = last_visit_text(r["last_visit"])
+            self.cells.append((r["plate"], format_phone(r["phone"]), text, r["note"], color))
+        self.endResetModel()
+
+    def rowCount(self, parent=QtCore.QModelIndex()):
+        return 0 if parent.isValid() else len(self.cells)
+
+    def columnCount(self, parent=QtCore.QModelIndex()):
+        return 0 if parent.isValid() else 4
+
+    def data(self, index, role=QtCore.Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        r, c = index.row(), index.column()
+        if role == QtCore.Qt.DisplayRole:
+            return self.cells[r][c]
+        if role == QtCore.Qt.UserRole:
+            return self.rows[r]["id"]
+        if role == QtCore.Qt.ForegroundRole and c == 2 and self.cells[r][4]:
+            color = self.cells[r][4]
+            return self._colors.setdefault(color, QtGui.QBrush(QtGui.QColor(color)))
+        if role == QtCore.Qt.ToolTipRole and c == 3 and self.cells[r][3]:
+            return self.cells[r][3]
+        if role == QtCore.Qt.TextAlignmentRole:
+            return int(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        return None
+
+    def headerData(self, section, orientation, role=QtCore.Qt.DisplayRole):
+        if orientation == QtCore.Qt.Horizontal and role == QtCore.Qt.DisplayRole:
+            return self.HEADERS[section]
+        return None
+
+
+class _BoldColumns(QtWidgets.QStyledItemDelegate):
+    """Plate and phone in bold - derived from the view's (stylesheet) font, so it
+    follows the 小/中/大/特大 and window-size scaling automatically."""
+
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        if index.column() < 2:
+            option.font.setBold(True)
+
+
+class CustomerTable(QtWidgets.QTableView):
+    """The customer list. Columns 0-2 are sized once from the longest values
+    (cheap); 備註 takes the rest. Never use per-cell items here (slow on Windows)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.model_ = CustomerModel(self)
+        self.setModel(self.model_)
+        self.setItemDelegate(_BoldColumns(self))
+        self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.setAlternatingRowColors(True)
+        self.setShowGrid(False)
+        self.setWordWrap(False)
+        self.setTextElideMode(QtCore.Qt.ElideRight)
+        self.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.setVerticalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
+        self.verticalHeader().setVisible(False)
+        sized(self.verticalHeader(), "setDefaultSectionSize", 46)
+        hh = self.horizontalHeader()
+        hh.setHighlightSections(False)
+        hh.setDefaultAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        for c in (0, 1, 2):
+            hh.setSectionResizeMode(c, QtWidgets.QHeaderView.Fixed)
+        hh.setSectionResizeMode(3, QtWidgets.QHeaderView.Stretch)
+
+    def set_rows(self, rows):
+        self.model_.set_rows(rows)
+        self.fit_columns()
+
+    def fit_columns(self):
+        """Width of plate / phone / last visit = their longest value (measured on a
+        handful of the longest strings, not on every row)."""
+        bold = QtGui.QFont(self.font())
+        bold.setBold(True)
+        header_fm = QtGui.QFontMetrics(self.horizontalHeader().font())
+        pad = px(34)
+        for c in (0, 1, 2):
+            fm = QtGui.QFontMetrics(bold if c < 2 else self.font())
+            texts = sorted({cells[c] for cells in self.model_.cells}, key=len, reverse=True)[:12]
+            width = max([fm.horizontalAdvance(t) for t in texts] +
+                        [header_fm.horizontalAdvance(CustomerModel.HEADERS[c])])
+            self.horizontalHeader().resizeSection(c, width + pad)
+
+    def changeEvent(self, event):  # font size changed via stylesheet
+        super().changeEvent(event)
+        if event.type() in (QtCore.QEvent.StyleChange, QtCore.QEvent.FontChange):
+            QtCore.QTimer.singleShot(0, self.fit_columns)
+
+    # small helpers used by the page, tools and tests
+    def rowCount(self):
+        return self.model_.rowCount()
+
+    def cell_text(self, row, col):
+        return self.model_.cells[row][col]
+
+    def row_id(self, row):
+        return self.model_.rows[row]["id"]
+
+    def row_rect(self, row):
+        return self.visualRect(self.model_.index(row, 0))
+
+
 class Toast(QtWidgets.QLabel):
     """Short fading status message instead of a popup."""
 
@@ -253,16 +377,9 @@ class CustomersPage(QtWidgets.QWidget):
                 b.setProperty("role", "primarysmall")
             card.add_header_widget(b)
 
-        # 備註 is rarely used: a narrow column at the end (full text on hover / in 客戶資訊)
-        self.table = make_table(["車牌號碼", "電話號碼", "上次來店", "備註"])
-        hh = self.table.horizontalHeader()
-        # plate / phone / last visit always fully visible; 備註 gets whatever room is left
-        for c in (0, 1, 2):
-            hh.setSectionResizeMode(c, QtWidgets.QHeaderView.ResizeToContents)
-        hh.setSectionResizeMode(3, QtWidgets.QHeaderView.Stretch)
-        self.table.setTextElideMode(QtCore.Qt.ElideRight)
-        self.table.setWordWrap(False)  # one line per customer
-        self.table.itemSelectionChanged.connect(self._selection_changed)
+        # plate / phone / last visit always fully visible; 備註 (rarely used) gets what is left
+        self.table = CustomerTable()
+        self.table.selectionModel().selectionChanged.connect(lambda *_: self._selection_changed())
         self.table.doubleClicked.connect(lambda _i: self.show_info())
         sized(self.table, "setMinimumHeight", 200)
         card.add(self.table, 1)
@@ -295,7 +412,7 @@ class CustomersPage(QtWidgets.QWidget):
 
         self._timer = QtCore.QTimer(self)  # filter after a short pause in typing
         self._timer.setSingleShot(True)
-        self._timer.setInterval(200)
+        self._timer.setInterval(120)  # short pause: the list is cheap to refresh now
         self._timer.timeout.connect(lambda: self.refresh(auto_pick=True))
         for w in (self.part1, self.part2, self.phone):
             w.textChanged.connect(lambda _t: self._timer.start())
@@ -345,8 +462,14 @@ class CustomersPage(QtWidgets.QWidget):
         return bool(self.part1.text() or self.part2.text() or self.phone.text())
 
     # ----------------------------------------------------------------- list
-    def refresh(self, select_id: Optional[int] = None, auto_pick: bool = False):
+    def refresh(self, select_id: Optional[int] = None, auto_pick: bool = False, force: bool = True):
+        """Reload the list. force=False (tab switches) skips it when neither the
+        search nor the data changed since the last load."""
         self._timer.stop()
+        key = (self.mode, self.part1.text(), self.part2.text(), self.phone.text(), self.db.conn.total_changes)
+        if not force and key == getattr(self, "_loaded_key", None):
+            return
+        self._loaded_key = key
         if select_id is None:
             select_id = self.selected_id(quiet=True)
         if self.mode == "plate":
@@ -357,28 +480,14 @@ class CustomersPage(QtWidgets.QWidget):
         if auto_pick and len(rows) == 1 and self._searching():
             select_id = rows[0]["id"]  # a search that finds one car selects it: ready to charge
         self.table.blockSignals(True)
-        self.table.clearSelection()
-        bold = QtGui.QFont(self.table.font())
-        bold.setBold(True)
-        colors = {}
-
-        def decorate(i):  # runs inside fill_table while column sizing is paused
-            r = rows[i]
-            self.table.item(i, 0).setFont(bold)
-            self.table.item(i, 1).setFont(bold)  # the number they look up to call
-            color = last_visit_text(r["last_visit"])[1]
-            if color:
-                self.table.item(i, 2).setForeground(colors.setdefault(color, QtGui.QColor(color)))
-            if r["note"]:
-                self.table.item(i, 3).setToolTip(r["note"])
-
-        fill_table(self.table, [(r["plate"], format_phone(r["phone"]),
-                                 last_visit_text(r["last_visit"])[0], r["note"]) for r in rows],
-                   row_data=[r["id"] for r in rows], fit_rows=False, decorate=decorate)
+        self.table.selectionModel().blockSignals(True)
+        self.table.set_rows(rows)
         selected_row = next((i for i, r in enumerate(rows) if r["id"] == select_id), -1)
         if selected_row >= 0:
             self.table.selectRow(selected_row)
-            self.table.scrollToItem(self.table.item(selected_row, 0), QtWidgets.QAbstractItemView.PositionAtCenter)
+            self.table.scrollTo(self.table.model_.index(selected_row, 0),
+                                QtWidgets.QAbstractItemView.PositionAtCenter)
+        self.table.selectionModel().blockSignals(False)
         self.table.blockSignals(False)
         self._selection_changed()
         total = self.db.count_customers()
@@ -390,12 +499,13 @@ class CustomersPage(QtWidgets.QWidget):
         self.charge.set_customer(next((r for r in self.rows if r["id"] == cid), None) if cid else None)
 
     def selected_id(self, quiet: bool = False) -> Optional[int]:
-        row = self.table.currentRow()
-        if row < 0 or not self.table.selectionModel().hasSelection() or self.table.item(row, 0) is None:
+        sel = self.table.selectionModel().selectedRows()
+        row = sel[0].row() if sel else -1
+        if row < 0 or row >= self.table.rowCount():
             if not quiet:
                 self.toast.show_text("請先在表格中點一下要處理的車", warn_style=True)
             return None
-        return self.table.item(row, 0).data(QtCore.Qt.UserRole)
+        return self.table.row_id(row)
 
     def selected_customer(self) -> Optional[dict]:
         cid = self.selected_id()
@@ -477,7 +587,6 @@ class ChargePanel(Card):
 
         head = QtWidgets.QHBoxLayout()
         head.addWidget(label("服務項目", "field", wrap=False))
-        head.addWidget(label("可多選", "muted", wrap=False))
         head.addStretch(1)
         head.addWidget(button("＋ 新增項目", "link", self._add_item))
         head.addWidget(button("管理項目", "link", self._manage_items))

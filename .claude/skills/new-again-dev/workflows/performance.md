@@ -1,20 +1,32 @@
 # Performance
 
-Budgets with `tools/bench.py` (3,000 customers, 100,000 washes ≈ 10 years), on a
-dev machine with ~5× headroom for old shop PCs:
+Measure on the target: `python tools/profile_ui.py --customers 3000 --washes 100000`
+**on the Windows test PC** (it is 5-10x slower than a Mac; the owner noticed lag
+that Mac numbers did not show). `tools/bench.py` gives data-layer timings.
 
-| Action | Budget | Last measured (2026-11-20) |
+Budgets on the Windows test VM (2026-11-20 measurements, before → after the
+model/view rewrite):
+
+| Action (3,000 customers / 100k washes) | Budget | Windows now (was) |
 | --- | --- | --- |
-| Open 客戶資料 (3,000 rows) | < 150 ms | 47 ms |
-| Type in search (filter) | < 100 ms | 53 ms |
-| Open 營收報表 / switch to year | < 100 ms | 37 / 43 ms |
-| Startup | < 1 s | 0.40 s |
-| Data: list all customers + last visit | < 30 ms | 14 ms |
+| Type in search (filter) | < 100 ms | 63 ms (349) |
+| ESC / clear search | < 100 ms | 63 ms (271) |
+| Save a charge (incl. disk sync) | < 150 ms | 102 ms (304) |
+| Switch tab and back | < 200 ms | 127 ms (425) |
+| Resize window (full restyle) | < 1 s | 645 ms (1,004) |
+| Startup (window shown) | < 1 s | 586 ms |
 
-Rules: style rows (fonts, colours, tooltips) only inside `fill_table(decorate=…)` —
-styling after the fill made 客戶資料 take 17.8 s with 3,000 rows (content-sized
-columns re-measure on every change); `tests/test_perf.py` guards this. Fill tables with `fill_table` (`fit_rows=False` for one-line rows; it
-pauses column auto-size); header `setResizeContentsPrecision` samples rows;
-debounce typing (200 ms); pages refresh when shown, load once at startup;
-report lists are capped (`ReportPage.RECORD_LIMIT`); per-customer and report
-queries must stay index-only.
+Rules:
+- The customer list is a `QTableView` + `CustomerModel` (only visible rows are
+  drawn). Never go back to per-cell `QTableWidgetItem`s for big lists: 12,000
+  items per keystroke was the Windows lag. Bold columns via the delegate, column
+  widths via `fit_columns()` (measures a dozen longest strings).
+- `refresh(force=False)` on tab switches skips the reload when the search and
+  `conn.total_changes` are unchanged.
+- Restyling (`setStyleSheet`) costs ~0.5 s on Windows: only when the base font size
+  really changes; maximized windows use the screen size so start-up restyles once.
+- Saving costs ~0.1 s on Windows because of the durable disk sync (synchronous
+  FULL) — keep it: losing a charge on power loss is worse.
+- Smaller tables (客戶資訊, reports) may use `fill_table`; style rows only inside
+  `fill_table(decorate=...)`. `tests/test_perf.py` guards the 3,000-row list.
+- Search debounce 120 ms.

@@ -426,7 +426,7 @@ class ItemGrid(QtWidgets.QWidget):
     @staticmethod
     def _decorate(b: QtWidgets.QPushButton):
         name = b.property("item_name")
-        b.setText(f"✓ {name}" if b.isChecked() else name)
+        b.setText(name)  # selection is shown by colour only: the chip never changes size
 
     def selected_ids(self) -> List[int]:
         return [b.property("item_id") for b in self.buttons if b.isChecked()]
