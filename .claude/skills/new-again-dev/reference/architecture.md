@@ -31,6 +31,7 @@ build_exe.bat          Windows: pip install -> pytest -> make_icon -> PyInstalle
 ```
 plate_info(id, part1, part2, phone_number, note NULL, brand '', vip 0,
            UNIQUE(part1, part2, phone_number))        -- one row per plate+phone
+                                                      -- vip: kept for old apps, unused (owner removed VIP)
 wash_records(id, plate_part1, plate_part2, amount INT, wash_date 'YYYY-MM-DD',
              note '一般洗車 - 額外備註', created_at)     -- linked by plate text
 settings(key, value)                                   -- new in 2.0; old apps ignore it

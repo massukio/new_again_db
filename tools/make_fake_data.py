@@ -49,8 +49,6 @@ def main():
             cid = db.add_customer(p1, p2, phone, rng.choice(NOTES), brand)
         except DataError:
             continue
-        if rng.random() < 0.08:
-            db.set_vip(cid, True)
         cars.append((p1, p2, rng.choice([7, 14, 21, 30, 60, None])))
     n = 0
     for p1, p2, every in cars:

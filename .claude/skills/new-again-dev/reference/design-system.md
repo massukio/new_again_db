@@ -25,8 +25,8 @@ and elegant"; remove anything too hard for an elder.
 - 記錄消費 (panel): chips + amount (required) + optional note, dated today;
   Enter amount → note → save; after saving the panel clears and the cursor
   returns to the search box.
-- 客戶資訊 on button or double-click: totals, history, ★ VIP toggle,
-  delete a mistaken wash.
+- 客戶資訊 on button or double-click: totals, history, all phone numbers,
+  delete a mistaken wash. (No VIP / ★ — removed by the owner.)
 
 ## Elder UX rules (from the owner, keep them)
 

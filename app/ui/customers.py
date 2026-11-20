@@ -372,7 +372,7 @@ class CustomersPage(QtWidgets.QWidget):
             if r["note"]:
                 self.table.item(i, 3).setToolTip(r["note"])
 
-        fill_table(self.table, [(("★ " if r["vip"] else "") + r["plate"], format_phone(r["phone"]),
+        fill_table(self.table, [(r["plate"], format_phone(r["phone"]),
                                  last_visit_text(r["last_visit"])[0], r["note"]) for r in rows],
                    row_data=[r["id"] for r in rows], fit_rows=False, decorate=decorate)
         selected_row = next((i for i, r in enumerate(rows) if r["id"] == select_id), -1)
@@ -814,11 +814,7 @@ class CustomerInfoDialog(QtWidgets.QDialog):
         top = Card("")
         head = QtWidgets.QHBoxLayout()
         head.addWidget(label(customer["plate"], "plate", wrap=False))
-        self.vip_badge = label("★ VIP", "badge", wrap=False)
-        head.addWidget(self.vip_badge)
         head.addStretch(1)
-        self.vip_btn = button("", slot=self.toggle_vip)
-        head.addWidget(self.vip_btn)
         top.add(head)
         phones = [format_phone(p["phone"]) for p in db.plate_phones(customer["part1"], customer["part2"]) if p["phone"]]
         details = [f"電話 {'、'.join(phones)}" if phones else "沒有電話"]
@@ -851,7 +847,7 @@ class CustomerInfoDialog(QtWidgets.QDialog):
         row.addStretch(1)
         close = button("關閉", "primary", self.accept)
         sized(close, "setMinimumWidth", 220)
-        close.setDefault(True)  # Enter closes; never toggles VIP by accident
+        close.setDefault(True)  # Enter closes the dialog
         row.addWidget(close)
         lay.addLayout(row)
         self.load()
@@ -860,9 +856,6 @@ class CustomerInfoDialog(QtWidgets.QDialog):
 
     def load(self):
         c = self.db.get_customer(self.c["id"]) or self.c
-        self.vip = c["vip"]
-        self.vip_badge.setVisible(self.vip)
-        self.vip_btn.setText("取消 VIP" if self.vip else "☆ 設為 VIP")
         s = self.db.customer_summary(c["part1"], c["part2"])
         self.t_total.set(fmt_money(s["total"]))
         self.t_visits.set(f"{s['visits']} 次")
@@ -871,10 +864,6 @@ class CustomerInfoDialog(QtWidgets.QDialog):
         washes = self.db.customer_washes(c["part1"], c["part2"])
         fill_table(self.table, [(fmt_date(w["wash_date"]), fmt_money(w["amount"]), w["note"]) for w in washes],
                    right=(1,), row_data=[w["id"] for w in washes])
-
-    def toggle_vip(self):
-        self.db.set_vip(self.c["id"], not self.vip)
-        self.load()
 
     def delete_wash(self):
         row = self.table.currentRow()

@@ -14,7 +14,7 @@ what the task needs, but always do steps 1 and 4.
 - User: an elderly car wash owner who has **memorized the search / add / edit /
   delete flow**. Never change that flow (see `reference/design-system.md`).
 - Data: customers = plate (two halves, e.g. ABC-1234) + phone + note + optional
-  brand + VIP; wash records = plate + amount + date + type/note.
+  brand; wash records = plate + amount + date + service items/note.
 - Pages: 客戶資料 (main: list + search on the left, 記錄消費 panel with editable
   service-item chips on the right) · 營收報表 · 備份/還原 · 設定. Dialogs:
   新增/修改資料, 客戶資訊, 管理服務項目.

@@ -210,13 +210,12 @@ def test_focus_and_escape_rules(env, qapp):
     assert all(b.focusPolicy() == QtCore.Qt.NoFocus for b in add.brands.buttons)
     assert not any(b.autoDefault() for b in add.findChildren(QtWidgets.QPushButton))
     add.close()
-    # 客戶資訊: Enter closes, VIP untouched
+    # 客戶資訊: Enter closes it
     info = CustomerInfoDialog(db, c, parent=page)
     info.show()
     QtWidgets.QApplication.setActiveWindow(info)
-    vip_before = db.get_customer(c["id"])["vip"]
     QTest.keyClick(info, QtCore.Qt.Key_Return)
-    assert info.result() == QtWidgets.QDialog.Accepted and db.get_customer(c["id"])["vip"] == vip_before
+    assert info.result() == QtWidgets.QDialog.Accepted
     # back on the main page the cursor is in the search box
     win.show_page(1)
     win.show_page(0)
@@ -251,3 +250,10 @@ def test_items_are_editable_from_the_panel(env, qapp, monkeypatch):
     assert page.charge.items.buttons[-1].property("item_name") == "除臭殺菌"
     page.charge._delete_item(sid, "除臭殺菌")
     assert "除臭殺菌" not in [b.property("item_name") for b in page.charge.items.buttons]
+
+
+def test_no_vip_marks(env, qapp):
+    win, page, db, _ = env
+    db.conn.execute("UPDATE plate_info SET vip=1")  # old databases may still have VIP flags
+    page.refresh()
+    assert all("★" not in page.table.item(i, 0).text() for i in range(page.table.rowCount()))

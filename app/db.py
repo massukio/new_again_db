@@ -4,7 +4,8 @@ Schema (kept compatible with every older version of the app, so backups move
 freely between old and new versions)
 ---------------------------------------------------------------------------
 plate_info   : one row per customer = plate (part1-part2) + phone. A plate may
-               appear with several phones. note, brand (optional), vip flag.
+               appear with several phones. note, brand (optional). The old vip
+               column is kept for compatibility but no longer used (owner: not needed).
                UNIQUE(part1, part2, phone_number).
 wash_records : one row per paid visit, linked to the plate text
                (plate_part1, plate_part2), amount (integer NT$), wash_date
@@ -127,7 +128,7 @@ def _create_schema(conn: sqlite3.Connection) -> None:
 
 _CUSTOMER_SELECT = (
     "SELECT p.id, p.part1, p.part2, COALESCE(p.phone_number, '') AS phone, COALESCE(p.note, '') AS note, "
-    "COALESCE(p.brand, '') AS brand, COALESCE(p.vip, 0) AS vip, "
+    "COALESCE(p.brand, '') AS brand, "
     "(SELECT MAX(w.wash_date) FROM wash_records w "
     " WHERE w.plate_part1 = p.part1 AND w.plate_part2 = p.part2) AS last_visit "
     "FROM plate_info p")
@@ -141,7 +142,6 @@ def _customer(row) -> dict:
     d = dict(row)
     d["phone"] = clean_phone(d["phone"])
     d["plate"] = f"{d['part1']}-{d['part2']}"
-    d["vip"] = bool(d["vip"])
     return d
 
 
@@ -262,10 +262,6 @@ class Database:
         """Deletes the customer row only; wash records stay so past earnings remain correct."""
         with self.conn:
             self.conn.execute("DELETE FROM plate_info WHERE id=?", (customer_id,))
-
-    def set_vip(self, customer_id: int, vip: bool) -> None:
-        with self.conn:
-            self.conn.execute("UPDATE plate_info SET vip=? WHERE id=?", (1 if vip else 0, customer_id))
 
     # ------------------------------------------------------------ service items
     def list_services(self, include_hidden: bool = False) -> List[dict]:

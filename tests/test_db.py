@@ -50,7 +50,7 @@ def test_opens_old_databases(tmp_path, script):
     assert [r["plate"] for r in rows] == ["ABC-1234", "DEF-5678"]
     assert rows[1]["note"] == "" and rows[1]["brand"] == ""
     if script is V11_SCHEMA:
-        assert rows[0]["vip"] and rows[0]["brand"] == "Toyota" and rows[0]["last_visit"] == "2026-11-01"
+        assert rows[0]["brand"] == "Toyota" and rows[0]["last_visit"] == "2026-11-01"
         assert d.customer_summary("ABC", "1234") == {"visits": 2, "total": 1100, "first_visit": "2026-10-01",
                                                       "last_visit": "2026-11-01", "avg": 550}
     # works normally after upgrade
@@ -75,7 +75,7 @@ def test_unreadable_file_is_set_aside_not_deleted(tmp_path):
 def test_customer_rules(db):
     cid = db.add_customer("abc", "1234", "0912-345-678", " 常客 ", "Toyota")
     c = db.get_customer(cid)
-    assert (c["plate"], c["phone"], c["note"], c["brand"], c["vip"]) == ("ABC-1234", "0912345678", "常客", "Toyota", False)
+    assert (c["plate"], c["phone"], c["note"], c["brand"]) == ("ABC-1234", "0912345678", "常客", "Toyota")
     with pytest.raises(DataError):
         db.add_customer("ABC", "1234", "0912345678")          # same plate + phone
     assert db.plate_exists("abc", "1234")                       # UI asks before adding another phone
@@ -87,8 +87,6 @@ def test_customer_rules(db):
         db.update_customer(other, "ABC", "1234", "")            # plate belongs to someone else
     db.update_customer(cid, "ABC", "1234", "0911111111", "改", "")
     assert db.get_customer(cid)["phone"] == "0911111111"
-    db.set_vip(second, True)
-    assert db.get_customer(second)["vip"] is True
     db.delete_customer(second)
     assert db.get_customer(second) is None
     with pytest.raises(DataError):

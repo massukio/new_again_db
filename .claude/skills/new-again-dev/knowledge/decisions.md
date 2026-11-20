@@ -27,3 +27,5 @@
   screen: actions in the list header, right column = 記錄消費 panel so a phone
   lookup and the charge happen together. Services = editable items from the shop's
   price list, NO prices or car sizes ("不需要價格，只要項目就好"); amount is typed.
+- 2026-11-20 — No VIP feature (★ mark, 設為 VIP) — "不用這種功能". The vip column stays in
+  the database only so old app versions keep working; nothing reads or writes it.
