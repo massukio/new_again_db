@@ -1,118 +1,36 @@
-# New Again Project
+# 再新洗車資料庫 (new_again_db)
 
-## Overview
+給洗車場使用的離線客戶紀錄程式，專為不熟悉電腦的長輩設計：大字、大按鈕、全中文，畫面簡單乾淨。
 
-This project is a car plate information management system built using Python and PyQt5. It allows users to add, view, update, and delete car plate information, including phone numbers and notes. The data is stored in an SQLite database.
+- 不需要安裝、不需要網路 — 一個 `再新洗車資料庫.exe` 點兩下就能用
+- **客戶資料**：車牌（前半—後半）、電話、備註、品牌（可不選）、VIP；用車牌或電話查詢，邊打邊找
+- **記錄消費**：選洗車類型、輸入金額，一次完成；打錯可以在「客戶資訊」刪除
+- **客戶資訊**：累計消費、來店次數、上次來店、平均消費、每一筆消費紀錄
+- **營收報表**：今日 / 本週 / 本月 / 今年，可以往前、往後看；總營收、筆數、來店車輛、明細
+- **備份 / 還原**：一鍵備份成一個檔案（隨身碟、雲端硬碟）；舊版的 .db、.sql 備份檔也能還原
+- 每天開啟時自動備份到 `再新洗車資料\自動備份\`（保留 30 天）
+- 字體與畫面會依視窗大小自動縮放，「設定」可再調大小
 
-## Features
+## 使用方式
 
-- **Add Car Plate Information**: Add new car plate information with phone numbers and notes.
-- **View All Information**: View all stored car plate information in a table format.
-- **Update Information**: Update existing car plate information.
-- **Delete Information**: Delete car plate information.
-- **Search Functionality**: Search for car plate information by plate number or phone number.
-- **Database Backup**: Backup the database to a specified location.
+1. 把 `再新洗車資料庫.exe` 放在一個資料夾裡，點兩下開啟。
+2. 第一次開啟會在旁邊建立 `再新洗車資料` 資料夾，所有資料都在這裡。
+3. **從舊版升級**：直接用新的 exe 取代舊的 exe。旁邊原本的 `database.db` 會自動搬進
+   `再新洗車資料\洗車資料.db`，資料全部保留。
+4. 換新電腦：複製 exe → 開啟 →「備份 / 還原」→「選擇備份檔並還原」。
 
-## Requirements
+## 開發 (Development)
 
-- Python 3.8+
-- PyQt5
-- SQLite3
+```bash
+pip install -r requirements.txt
+NEWAGAIN_DATA_DIR=/tmp/cw python start.py      # run with test data
+python -m pytest -q -p no:cacheprovider tests  # data layer, old schemas, old backups
+build_exe.bat                                  # Windows: -> dist\再新洗車資料庫.exe
+```
 
-## Installation
-
-1. Clone the repository:
-    ```sh
-    git clone https://github.com/yourusername/new_again.git
-    cd new_again
-    ```
-
-2. Create a virtual environment and activate it:
-    ```sh
-    python -m venv .venv
-    source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
-    ```
-
-3. Install the required packages:
-    ```sh
-    pip install .
-    ```
-    or
-    ```sh
-    pip install -r requirement.txt
-    ```
-
-## Usage
-
-1. Run the application (it will automatically initialize the database if needed):
-    ```sh
-    python start.py
-    ```
-
-## Building the Executable
-
-To build the application into a standalone executable using PyInstaller, follow these steps:
-
-1. Install PyInstaller:
-    ```sh
-    pip install pyinstaller
-    ```
-
-2. Create a PyInstaller spec file:
-    ```sh
-    pyinstaller --name new_again_db --onefile --noconsole start.py
-    ```
-
-3. Build the executable:
-    ```sh
-    pyinstaller new_again_db.spec
-    ```
-
-The executable will be created in the dist directory.
-
-## Project Structure
-
-- core: Contains the main application logic and core components.
-  - `__init__.py`: Makes the directory a package.
-  - `application.py`: Main application class.
-  - `logger.py`: Configures logging for the application.
-- ui: Contains UI components and handlers.
-  - `__init__.py`: Makes the directory a package.
-  - `add_plate_dialog.py`: Dialog for adding car plate information.
-  - `main_ui.py`: Main UI setup for the application.
-  - `table_view_handler.py`: Handles the table view operations.
-- database: Contains database-related scripts.
-  - `__init__.py`: Makes the directory a package.
-  - `database.py`: Database operations.
-  - `initialize_db.py`: Script to initialize the database.
-- utils: Contains utility functions and helpers.
-  - `__init__.py`: Makes the directory a package.
-  - `helpers.py`: Utility functions.
-- config: Contains configuration files and constants.
-  - `__init__.py`: Makes the directory a package.
-  - `constants.py`: Application constants.
-- `designer/`: Contains UI design files.
-  - `add.ui`: UI design for adding car plate information.
-  - `new_again.ui`: Main window UI design.
-- .vscode: Contains VS Code configuration files.
-  - `settings.json`: VS Code settings.
-  - `tasks.json`: VS Code tasks.
-- start.py: Entry point for the application.
-- `requirements.txt`: List of required packages.
-- .gitignore: Git ignore file.
+Maintainers (human or AI): start with
+[`.claude/skills/new-again-dev/SKILL.md`](.claude/skills/new-again-dev/SKILL.md).
 
 ## License
 
-This project is licensed under the MIT License. See the LICENSE file for details.
-
-## Author
-
-Sukio Lin
-
-## Acknowledgements
-
-- PyQt5 Documentation
-- SQLite Documentation
-- Python Logging Documentation
-- GitHub Copilot for assistance in code generation
-- All contributors and users
+MIT License — Copyright (c) 2025 Sukio Lin. See [LICENSE](LICENSE).

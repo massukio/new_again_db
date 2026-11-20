@@ -1,43 +1,78 @@
-"""
-Entry point. Runs bootstrap to ensure environment, then launches app inside venv.
-"""
-import sys
+"""Entry point: python start.py  (or double-click the built exe)."""
+import datetime
 import os
+import sys
+import traceback
 
-PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
-VENV_DIR = os.path.join(PROJECT_DIR, ".venv")
-VENV_PYTHON = os.path.join(VENV_DIR, "Scripts", "python.exe") if sys.platform == "win32" \
-    else os.path.join(VENV_DIR, "bin", "python")
+from PyQt5 import QtCore, QtGui, QtWidgets
 
-
-def _in_venv():
-    return sys.prefix != sys.base_prefix
+from app import backup, config
+from app.db import open_database
 
 
-def main():
-    if _in_venv():
-        # Inside venv — launch the app
-        from PyQt5 import QtWidgets
-        from core.application import MainWindow
+def _log_path() -> str:
+    try:
+        return os.path.join(config.data_dir(), config.LOG_FILENAME)
+    except OSError:
+        return os.path.join(os.path.expanduser("~"), f"{config.APP_NAME}_{config.LOG_FILENAME}")
 
-        app = QtWidgets.QApplication(sys.argv)
-        main_window = MainWindow()
-        main_window.show()
-        main_window.showMaximized()
 
-        exit_code = app.exec_()
-        main_window.close()
-        sys.exit(exit_code)
-    else:
-        # Outside venv — bootstrap then relaunch inside venv
-        from bootstrap import setup
-        if not setup():
-            print("Environment setup failed.")
-            sys.exit(1)
+def _excepthook(exc_type, exc, tb):
+    text = "".join(traceback.format_exception(exc_type, exc, tb))
+    try:
+        with open(_log_path(), "a", encoding="utf-8") as f:
+            f.write(f"\n[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}]\n{text}")
+    except OSError:
+        pass
+    if QtWidgets.QApplication.instance() is not None:
+        QtWidgets.QMessageBox.critical(
+            None, "發生錯誤", f"程式發生錯誤，請把以下檔案給維護人員：\n{_log_path()}\n\n{exc}")
 
-        # Re-exec inside the venv python
-        os.execv(VENV_PYTHON, [VENV_PYTHON, __file__])
+
+def main() -> int:
+    sys.excepthook = _excepthook
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+    QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
+    app = QtWidgets.QApplication(sys.argv)
+    app.setApplicationName(config.APP_NAME)
+    icon_path = config.resource_path("assets", "app.ico")
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QtGui.QIcon(icon_path))
+    QtCore.QLocale.setDefault(QtCore.QLocale(QtCore.QLocale.Chinese, QtCore.QLocale.Taiwan))
+    translator = QtCore.QTranslator(app)
+    if translator.load("qtbase_zh_TW", QtCore.QLibraryInfo.location(QtCore.QLibraryInfo.TranslationsPath)):
+        app.installTranslator(translator)
+
+    # one copy at a time: two copies writing the same database would block each other
+    lock = QtCore.QLockFile(os.path.join(config.data_dir(), config.LOCK_FILENAME))
+    lock.setStaleLockTime(0)
+    if not lock.tryLock(100):
+        QtWidgets.QMessageBox.information(
+            None, config.APP_NAME, f"{config.APP_NAME}已經開著了。\n\n請在下方工作列找到它，點一下就可以回到程式。")
+        return 0
+
+    try:
+        db, aside = open_database(config.db_path())
+    except Exception as e:  # noqa: BLE001 - show any startup problem to the user
+        QtWidgets.QMessageBox.critical(None, "無法開啟資料", f"無法開啟資料檔：\n{config.db_path()}\n\n{e}")
+        return 1
+    if aside:
+        QtWidgets.QMessageBox.warning(
+            None, "資料檔無法讀取",
+            f"原本的資料檔無法讀取，已經另存為：\n{aside}\n\n程式已建立新的資料檔。"
+            f"如果有備份檔，請到「備份 / 還原」把資料還原回來。")
+    try:
+        backup.daily_auto_backup(db, config.auto_backup_dir())
+    except Exception as e:  # noqa: BLE001 - auto backup must never block startup
+        _excepthook(type(e), e, e.__traceback__)
+
+    from app.ui.main_window import MainWindow
+    win = MainWindow(db)
+    win.showMaximized()
+    rc = app.exec_()
+    db.close()
+    return rc
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

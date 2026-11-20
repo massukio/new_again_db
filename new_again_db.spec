@@ -1,73 +1,36 @@
 # -*- mode: python ; coding: utf-8 -*-
-
+# Build:  pyinstaller --noconfirm new_again_db.spec   (or run build_exe.bat)
 import os
 
-project_root = os.getcwd()
-
-datas = [
-    (os.path.join(project_root, 'core'), 'core'),
-    (os.path.join(project_root, 'ui'), 'ui'),
-    (os.path.join(project_root, 'database'), 'database'),
-    (os.path.join(project_root, 'utils'), 'utils'),
-    (os.path.join(project_root, 'config'), 'config'),
-    (os.path.join(project_root, 'assets'), 'assets'),
-]
+icon = os.path.join("assets", "app.ico")
+datas = [(os.path.join("assets", "brands"), os.path.join("assets", "brands"))]
+datas += [(p, "assets") for p in (icon, os.path.join("assets", "app.png")) if os.path.exists(p)]
 
 a = Analysis(
-    ['start.py'],
-    pathex=[project_root],
-    binaries=[],
+    ["start.py"],
+    pathex=[],
     datas=datas,
-    hiddenimports=[
-        'core',
-        'core.application',
-        'core.logger',
-        'ui',
-        'ui.main_ui',
-        'ui.add_plate_dialog',
-        'ui.table_view_handler',
-        'ui.styles',
-        'ui.font_size_dialog',
-        'ui.wash_record_dialog',
-        'ui.earnings_page',
-        'ui.customer_dashboard',
-        'database',
-        'database.database',
-        'database.initialize_db',
-        'utils',
-        'utils.helpers',
-        'config',
-        'config.constants',
-        'config.config_manager',
-        'config.brands',
+    hiddenimports=[],
+    excludes=[
+        "tkinter", "unittest", "pydoc", "pytest", "PIL",
+        "PyQt5.QtNetwork", "PyQt5.QtQml", "PyQt5.QtQuick", "PyQt5.QtWebEngineWidgets",
+        "PyQt5.QtMultimedia", "PyQt5.QtBluetooth", "PyQt5.QtSql", "PyQt5.QtTest",
+        "PyQt5.QtDesigner", "PyQt5.QtOpenGL", "PyQt5.QtSvg", "PyQt5.QtXml",
     ],
-    hookspath=[],
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=[],
     noarchive=False,
-    optimize=0,
 )
-
 pyz = PYZ(a.pure)
-
 exe = EXE(
     pyz,
     a.scripts,
     a.binaries,
     a.datas,
     [],
-    name='new_again_db',
+    name="再新洗車資料庫",
     debug=False,
-    bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    upx_exclude=[],
+    upx=False,
     runtime_tmpdir=None,
     console=False,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
+    icon=icon if os.path.exists(icon) else None,
 )

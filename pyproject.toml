@@ -1,26 +1,15 @@
 [project]
 name = "new-again-db"
-version = "1.1.0"
-description = "Elder car wash plate record management system (再新洗車資料庫)"
+version = "2.0.0"
+description = "再新洗車資料庫 - offline car wash customer and spending records for elderly operators"
 requires-python = ">=3.12"
-dependencies = [
-    "PyQt5>=5.15.11",
-]
+dependencies = ["PyQt5>=5.15.11"]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=8.0",
-    "pyinstaller>=6.0",
-]
+dev = ["pytest>=8.0", "pyinstaller>=6.0", "pillow>=11.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.setuptools]
-packages = ["core", "ui", "database", "config", "utils"]
-
-[dependency-groups]
-dev = [
-    "pytest>=8.0",
-    "pyinstaller>=6.0",
-]
+packages = ["app", "app.ui"]
