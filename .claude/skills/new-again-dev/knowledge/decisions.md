@@ -36,3 +36,5 @@
   branches force-pushed (28 MB -> 1.9 MB). Old clones must be re-cloned. The
   redesign branch is `autorepair-design` (a branch named `refactor` exists, so
   `refactor/...` names are impossible).
+- 2026-11-24 — 2.0.1 (review fixes). The tiny synthetic legacy fixtures `tests/fixtures/legacy/*.db` ARE committed (exception in .gitignore); real or fake shop databases never are.
+- 2026-11-25 — In-app 使用說明 (owner request): Traditional Chinese, Taiwanese spoken style, table of contents, screenshots with numbered highlights, opens from the header / F1, can be saved as PDF. Released as 2.0.2.

@@ -11,7 +11,8 @@ app/db.py              Database: customers, wash records, reports, backup_to (VA
 app/backup.py          daily auto backup + before-restore safety copies (pruned)
 app/brands.py          brand list + logo paths (assets/brands/*.png)
 app/ui/main_window.py  header (icon, name, tabs), page stack, window-size font scaling
-app/ui/customers.py    CustomersPage (main: list, header actions, search), ChargePanel
+app/ui/customers.py    CustomersPage (main: list, header actions, search; refresh skips
+                       when (search, today, total_changes) is unchanged, invalidate() forces), ChargePanel
                        (記錄消費: ChipFlow service items + amount + note), CustomerDialog
                        (add/edit), CustomerInfoDialog, BrandGrid, FlowLayout/ChipFlow, Toast
 app/ui/items.py        service item flows (add / rename / delete / reorder) + manager dialog
@@ -20,7 +21,11 @@ app/ui/pages.py        ReportPage, BackupPage, SettingsPage (字體大小, 服�
 app/ui/widgets.py      shared widgets (Card, Tile, Segmented, fill_table, messages ...) -
                        same file as in autorepair_db
 app/ui/style.py        palette (teal accent), stylesheet, sized() scaling registry
-tools/                 make_icon.py, screenshot.py, make_fake_data.py, bench.py
+app/ui/manual.py       使用說明 window (QTextBrowser, not modal, opens at the current page's
+                       chapter, 存成 PDF) - same file in autorepair_db
+assets/manual/         manual.html (the text, Traditional Chinese) + highlighted screenshots
+tools/                 make_icon.py, screenshot.py, make_fake_data.py, bench.py,
+                       make_manual.py (regenerates assets/manual/*.png with numbered highlights)
 tests/test_db.py       data layer incl. every old schema, .sql dump restore, file moves
 new_again_db.spec      PyInstaller (exe 再新洗車資料庫.exe, bundles assets/brands + icon)
 build_exe.bat          Windows: pip install -> pytest -> make_icon -> PyInstaller (CRLF, ASCII)

@@ -462,8 +462,9 @@ class Database:
                 os.remove(tmp)
             self.conn.commit()
             self.conn.execute("VACUUM INTO ?", (tmp,))
+            self.check_backup_file(tmp)  # never replace an older good backup with a bad copy
             os.replace(tmp, dest_path)
-        except (OSError, sqlite3.Error) as e:
+        except (OSError, sqlite3.Error, DataError) as e:
             try:
                 if os.path.exists(tmp):
                     os.remove(tmp)
@@ -513,8 +514,10 @@ def _remove(path: Optional[str]) -> None:
 def _uri_path(path: str) -> str:
     from urllib.parse import quote
     p = os.path.abspath(path).replace("\\", "/")
-    if not p.startswith("/"):
-        p = "/" + p
+    if p.startswith("//"):
+        p = "//" + p  # network path //server/share/x -> file:////server/share/x
+    elif not p.startswith("/"):
+        p = "/" + p  # C:/x -> /C:/x
     return quote(p, safe="/:")
 
 
@@ -548,9 +551,16 @@ def _open_backup_source(path: str):
         raise DataError("這個檔案不是本程式的備份檔。")
     if "CREATE TABLE" not in script.upper() or "PLATE_INFO" not in script.upper():
         raise DataError("這個檔案不是本程式的備份檔。")
-    fd, tmp = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    conn = sqlite3.connect(tmp)
+    try:
+        fd, tmp = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+    except OSError as e:
+        raise DataError(f"無法讀取這個 .sql 備份檔（暫存空間不足？）：{e}")
+    try:
+        conn = sqlite3.connect(tmp)
+    except sqlite3.Error as e:
+        _remove(tmp)
+        raise DataError(f"無法讀取這個 .sql 備份檔：{e}")
     try:
         conn.set_authorizer(_deny_outside_access)
         conn.executescript(script)

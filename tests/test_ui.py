@@ -1,4 +1,6 @@
 """Offscreen UI flow tests: the owner's memorized flow must keep working."""
+import os
+
 import pytest
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtTest import QTest
@@ -290,3 +292,214 @@ def test_huge_list_is_capped(env, qapp, monkeypatch):
     page.part1.setText("XYZ")
     page.refresh()
     assert page.table.rowCount() == 1 and page.count_label.text().startswith("找到 1 筆")
+
+
+def test_failed_restore_puts_old_data_back(env, qapp, tmp_path, monkeypatch):
+    import sqlite3
+    from app import db as db_mod
+    from app.ui import pages
+    win, page, db, _ = env
+    other = Database(str(tmp_path / "other.db"))
+    other.add_customer("NEW", "0001", "0933000111")
+    other.close()
+    monkeypatch.setattr(pages.QtWidgets.QFileDialog, "getOpenFileName",
+                        lambda *a, **k: (str(tmp_path / "other.db"), ""))
+    monkeypatch.setattr(pages, "ask", lambda *a, **k: True)
+    msgs = []
+    monkeypatch.setattr(pages, "warn", lambda _p, t, *a, **k: msgs.append(t))
+    real, calls = db_mod._create_schema, []
+
+    def flaky(conn):  # the upgrade after the copy fails once
+        calls.append(1)
+        if len(calls) == 1:
+            raise sqlite3.IntegrityError("boom")
+        real(conn)
+    monkeypatch.setattr(db_mod, "_create_schema", flaky)
+    win.backup_page._restore()
+    assert msgs and "恢復成還原前" in msgs[0]
+    assert db.count_customers() == 2
+
+
+def test_restore_reloads_list_and_clears_chips(env, qapp, tmp_path, monkeypatch):
+    from app.ui import pages
+    win, page, db, _ = env
+    page.table.selectRow(0) if hasattr(page.table, "selectRow") else None
+    settle(qapp)
+    if page.charge.items.buttons:
+        page.charge.items.buttons[0].setChecked(True)
+    other = Database(str(tmp_path / "other.db"))
+    other.add_customer("NEW", "0001", "0933000111")
+    other.close()
+    monkeypatch.setattr(pages.QtWidgets.QFileDialog, "getOpenFileName",
+                        lambda *a, **k: (str(tmp_path / "other.db"), ""))
+    monkeypatch.setattr(pages, "ask", lambda *a, **k: True)
+    monkeypatch.setattr(pages, "info", lambda *a, **k: None)
+    win.backup_page._restore()
+    win.show_page(0)
+    settle(qapp)
+    assert [r["plate"] for r in page.rows] == ["NEW-0001"]
+    assert page.charge.items.selected_ids() == []
+
+
+def test_enter_on_focused_cancel_does_not_save(env, qapp):
+    from app.ui.customers import CustomerDialog
+    win, page, db, _ = env
+    before = db.count_customers()
+    dlg = CustomerDialog(db, parent=page)
+    dlg.show()
+    QtWidgets.QApplication.setActiveWindow(dlg)
+    dlg.part1.setText("ENT"); dlg.part2.setText("1"); dlg.phone.setText("0955")
+    dlg.cancel_btn.setFocus()
+    QTest.keyClick(dlg.cancel_btn, QtCore.Qt.Key_Return)
+    assert db.count_customers() == before and not dlg.isVisible()
+
+
+def test_charge_toast_shows_no_money(env, qapp):
+    win, page, db, _ = env
+    page.table.selectRow(0)
+    settle(qapp)
+    page.charge.amount.setText("450")
+    page.charge.save()
+    assert "$" not in page.toast.text() and "450" not in page.toast.text()
+
+
+def test_restore_drops_selection_and_typed_charge(env, qapp, tmp_path, monkeypatch):
+    from app.ui import pages
+    win, page, db, _ = env
+    page.table.selectRow(0)
+    settle(qapp)
+    page.charge.amount.setText("999")
+    other = Database(str(tmp_path / "other.db"))  # same ids, other cars
+    other.add_customer("OTH", "0001", "0933000111")
+    other.add_customer("OTH", "0002", "0933000222")
+    other.close()
+    monkeypatch.setattr(pages.QtWidgets.QFileDialog, "getOpenFileName",
+                        lambda *a, **k: (str(tmp_path / "other.db"), ""))
+    monkeypatch.setattr(pages, "ask", lambda *a, **k: True)
+    monkeypatch.setattr(pages, "info", lambda *a, **k: None)
+    win.backup_page._restore()
+    win.show_page(0)
+    settle(qapp)
+    assert page.charge.customer is None and page.charge.amount.text() == ""
+    assert not page.charge.save_btn.isEnabled()
+
+
+def test_list_rebuilds_on_a_new_day(env, qapp, monkeypatch):
+    import datetime as real_dt
+    from app.ui import customers
+    win, page, db, _ = env
+    win.show_page(1)
+    calls = []
+    orig = page.table.set_rows
+    monkeypatch.setattr(page.table, "set_rows", lambda rows: (calls.append(1), orig(rows)))
+
+    import types
+    tomorrow = real_dt.date.today() + real_dt.timedelta(days=1)
+
+    class Tomorrow(real_dt.date):
+        @classmethod
+        def today(cls):
+            return tomorrow
+    fake = types.SimpleNamespace(**{k: getattr(real_dt, k) for k in dir(real_dt) if not k.startswith("__")})
+    fake.date = Tomorrow
+    monkeypatch.setattr(customers, "_dt", fake)  # only this module sees tomorrow
+    win.show_page(0)
+    assert calls  # same search, no data change, but a new day: 「N天前」 must be rebuilt
+
+
+def test_manual_is_complete():
+    """Every picture exists, every link has its target, every page has a chapter."""
+    import os
+    import re
+    from app.ui import manual
+    from app.ui.main_window import MainWindow
+    html = manual.manual_html()
+    names = set(re.findall(r'<a name="([^"]+)"', html))
+    for img in manual.image_names(html):
+        assert os.path.exists(os.path.join(manual.MANUAL_DIR, img)), img
+    for link in re.findall(r'<a href="#([^"]+)"', html):
+        assert link in names, link
+    assert set(MainWindow.MANUAL_ANCHORS) <= names and "toc" in names
+
+
+def test_manual_opens_at_the_current_page_and_saves_pdf(env, qapp, tmp_path, monkeypatch):
+    from app.ui import manual
+    win, page, db, _ = env
+    win.resize(1070, 540)
+    settle(qapp)
+    assert win.header.sizeHint().width() <= win.width()  # no tab or help button cut off
+    win.show_page(2)
+    win.open_manual()
+    dlg = win._manual
+    for _ in range(20):
+        qapp.processEvents()
+        QtCore.QThread.msleep(10)
+    assert dlg.isVisible() and not dlg.isModal()
+    assert dlg.view.verticalScrollBar().value() > 0  # at chapter 九 (備份), not at the top
+    win.open_manual()
+    assert win._manual is dlg
+    out = tmp_path / "說明.pdf"
+    monkeypatch.setattr(manual.QtWidgets.QFileDialog, "getSaveFileName", lambda *a, **k: (str(out), ""))
+    monkeypatch.setattr(manual, "ask", lambda *a, **k: False)
+    dlg.save_pdf()
+    assert out.exists() and out.stat().st_size > 100_000  # text + pictures
+    dlg.close()
+
+
+def test_edit_dialog_shows_the_whole_phone_number(env, qapp):
+    from app.ui.customers import CustomerDialog
+    win, page, db, _ = env
+    win.resize(1280, 900)
+    win.apply_font_size()  # the real size for this window (the resize timer has not run yet)
+    page.table.selectRow(0)
+    settle(qapp)
+    dlg = CustomerDialog(db, customer=page.selected_customer(), parent=page)
+    dlg.show()
+    settle(qapp)
+    fm = dlg.phone.fontMetrics()
+    assert dlg.phone.width() > fm.horizontalAdvance(dlg.phone.text())
+    dlg.close()
+
+
+def test_chip_grid_relayout_never_runs_after_it_is_gone(qapp):
+    """A font change schedules a relayout; closing the window first must not crash."""
+    import sys
+    from PyQt5 import QtCore, QtWidgets
+    from app.ui.widgets import ItemGrid
+    errors = []
+    old, sys.excepthook = sys.excepthook, lambda *a: errors.append(a[1])
+    try:
+        holder = QtWidgets.QWidget()
+        grid = ItemGrid(holder)
+        grid.set_items([{"id": 1, "name": "機油"}, {"id": 2, "name": "電瓶"}])
+        holder.setStyleSheet("QPushButton { font-size: 30pt; }")  # like 設定 → 字體大小
+        from PyQt5 import sip
+        sip.delete(holder)  # the window is gone before the relayout runs
+        for _ in range(5):
+            qapp.processEvents()
+    finally:
+        sys.excepthook = old
+    assert not errors, errors
+
+
+def test_release_zip_is_one_folder_with_exe_and_manual(tmp_path):
+    """The zip users get: a folder with the exe and ONE html manual (pictures inside)."""
+    import importlib.util
+    import zipfile
+    from app import config as cfg
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    spec = importlib.util.spec_from_file_location("make_release", os.path.join(root, "tools", "make_release.py"))
+    mr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mr)
+    exe = tmp_path / f"{cfg.APP_NAME}.exe"
+    exe.write_bytes(b"MZ fake exe")
+    out = mr.pack(str(exe), str(tmp_path))
+    folder = f"{cfg.APP_NAME}_{cfg.APP_VERSION}"
+    with zipfile.ZipFile(out) as z:
+        assert z.namelist() == [f"{folder}/{cfg.APP_NAME}.exe", f"{folder}/使用說明書.html"]
+        assert all(i.flag_bits & 0x800 for i in z.infolist())  # Chinese names show right in Windows
+        html = z.read(f"{folder}/使用說明書.html").decode("utf-8")
+    import re
+    srcs = re.findall(r'<img src="([^"]+)"', html)
+    assert srcs and all(s.startswith("data:image/png;base64,") for s in srcs)  # no outside files needed
+    assert '<a name="toc">' in html

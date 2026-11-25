@@ -60,7 +60,7 @@ def button(text: str, role: Optional[str] = None, slot=None) -> QtWidgets.QPushB
     if role:
         b.setProperty("role", role)
     b.setCursor(QtCore.Qt.PointingHandCursor)
-    b.setFocusPolicy(QtCore.Qt.NoFocus if role in ("item", "nav", "seg", "link", "brand", "chip") else QtCore.Qt.StrongFocus)
+    b.setFocusPolicy(QtCore.Qt.NoFocus if role in ("item", "nav", "seg", "link", "help", "brand", "chip") else QtCore.Qt.StrongFocus)
     # never let Enter "click" a button the user cannot see is focused; dialogs handle Enter themselves
     b.setAutoDefault(False)
     if slot is not None:
@@ -357,6 +357,11 @@ class ItemGrid(QtWidgets.QWidget):
 
     def __init__(self, parent=None, max_columns: int = 5):
         super().__init__(parent)
+        # owned by the grid, so it can never fire after the grid (and its chips) are gone
+        self._relayout_timer = QtCore.QTimer(self)
+        self._relayout_timer.setSingleShot(True)
+        self._relayout_timer.setInterval(0)
+        self._relayout_timer.timeout.connect(lambda: self._relayout(force=True))
         self.max_columns = max_columns
         self.columns = 3
         self.grid = QtWidgets.QGridLayout(self)
@@ -421,7 +426,9 @@ class ItemGrid(QtWidgets.QWidget):
     def changeEvent(self, event):  # font size changed via stylesheet
         super().changeEvent(event)
         if event.type() in (QtCore.QEvent.StyleChange, QtCore.QEvent.FontChange):
-            QtCore.QTimer.singleShot(0, lambda: self._relayout(force=True))
+            timer = getattr(self, "_relayout_timer", None)  # style events can arrive while building
+            if timer is not None:
+                timer.start()
 
     @staticmethod
     def _decorate(b: QtWidgets.QPushButton):
@@ -470,29 +477,31 @@ def table_item(text: str, data=None, align_right: bool = False) -> QtWidgets.QTa
     return it
 
 
-def fill_table(table: QtWidgets.QTableWidget, rows, right=(), row_data=None,
-               fit_rows: bool = True, decorate=None) -> None:
-    """Fill a table in one go. Column auto-sizing is paused while filling,
-    otherwise Qt re-measures whole columns after every cell (very slow).
-    decorate(row_index) may style the row's items (fonts, colours, tooltips): it runs
-    while sizing is paused - never style items after fill_table returns."""
+def fill_table(table: QtWidgets.QTableWidget, rows, right=(), row_data=None, append: bool = False) -> None:
+    """Fill a table in one go (or add rows at the end with append=True).
+    Column auto-sizing is paused while filling, otherwise Qt re-measures whole
+    columns after every cell (very slow)."""
+    rows = list(rows)
     hh = table.horizontalHeader()
     modes = [hh.sectionResizeMode(c) for c in range(table.columnCount())]
     for c in range(table.columnCount()):
         hh.setSectionResizeMode(c, QtWidgets.QHeaderView.Fixed)
     table.setUpdatesEnabled(False)
+    start = table.rowCount() if append else 0
     try:
-        table.clearContents()
-        table.setRowCount(len(rows))
+        if not append:
+            table.clearContents()
+        table.setRowCount(start + len(rows))
         for r, values in enumerate(rows):
             for c, v in enumerate(values):
                 data = row_data[r] if (row_data is not None and c == 0) else None
-                table.setItem(r, c, table_item(v, data, align_right=c in right))
-            if decorate is not None:
-                decorate(r)
+                table.setItem(start + r, c, table_item(v, data, align_right=c in right))
+        if append:
+            for r in range(start, start + len(rows)):
+                table.resizeRowToContents(r)
     finally:
         for c, m in enumerate(modes):
             hh.setSectionResizeMode(c, m)
         table.setUpdatesEnabled(True)
-    if fit_rows:  # skip for one-line rows: measuring every row is slow on big tables
+    if not append:
         table.resizeRowsToContents()

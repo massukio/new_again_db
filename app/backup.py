@@ -14,7 +14,7 @@ AUTO_PREFIX = AUTO_BACKUP_PREFIX
 
 
 def _prune(folder: str, prefix: str, keep: int) -> None:
-    files = sorted(glob.glob(os.path.join(folder, prefix + "*.db")))
+    files = sorted(glob.glob(os.path.join(glob.escape(folder), glob.escape(prefix) + "*.db")))
     for old in files[:-keep] if keep > 0 else files:
         try:
             os.remove(old)

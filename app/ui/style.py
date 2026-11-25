@@ -94,10 +94,18 @@ def build_stylesheet(base: int) -> str:
     }}
     QPushButton[role="nav"] {{
         background: transparent; border: none; border-radius: {p(10)}px;
-        color: {MUTED}; font-size: {base + 2}pt; font-weight: bold; padding: {p(10)}px {p(20)}px;
+        color: {MUTED}; font-size: {base + 2}pt; font-weight: bold; padding: {p(10)}px {p(16)}px;
     }}
     QPushButton[role="nav"]:hover {{ background: {PRIMARY_SOFT}; color: {PRIMARY_DARK}; }}
     QPushButton[role="nav"]:checked {{ background: {PRIMARY}; color: white; }}
+    QPushButton[role="help"] {{
+        background: {AMBER_SOFT}; border: 1px solid #E8C98A; border-radius: {p(10)}px;
+        color: {AMBER}; font-weight: bold; padding: {p(8)}px {p(16)}px;
+    }}
+    QPushButton[role="help"]:hover {{ background: #FCEBC8; border-color: {AMBER}; }}
+    QTextBrowser[role="manual"] {{
+        background: {SURFACE}; border: 1px solid {BORDER}; border-radius: {p(12)}px; padding: {p(8)}px {p(14)}px;
+    }}
 
     /* ---------- cards & text ---------- */
     QFrame[role="card"] {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: {p(16)}px; }}

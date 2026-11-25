@@ -17,6 +17,15 @@ def _log_path() -> str:
         return os.path.join(os.path.expanduser("~"), f"{config.APP_NAME}_{config.LOG_FILENAME}")
 
 
+def _log(exc) -> None:
+    text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    try:
+        with open(_log_path(), "a", encoding="utf-8") as f:
+            f.write(f"\n[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}]\n{text}")
+    except OSError:
+        pass
+
+
 def _excepthook(exc_type, exc, tb):
     text = "".join(traceback.format_exception(exc_type, exc, tb))
     try:
@@ -44,7 +53,13 @@ def main() -> int:
         app.installTranslator(translator)
 
     # one copy at a time: two copies writing the same database would block each other
-    lock = QtCore.QLockFile(os.path.join(config.data_dir(), config.LOCK_FILENAME))
+    try:
+        folder = config.data_dir()
+    except OSError as e:
+        QtWidgets.QMessageBox.critical(
+            None, "無法開啟資料", f"找不到可以存放資料的資料夾。\n請把程式放到「文件」或桌面再打開。\n\n{e}")
+        return 1
+    lock = QtCore.QLockFile(os.path.join(folder, config.LOCK_FILENAME))
     lock.setStaleLockTime(0)
     if not lock.tryLock(100):
         QtWidgets.QMessageBox.information(
@@ -70,11 +85,17 @@ def main() -> int:
     win = MainWindow(db)
     win.showMaximized()
 
+    told = {"backup_failed": False}
+
     def hourly_backup():  # the PC may stay on for days: make the new day's backup too
         try:
             backup.daily_auto_backup(db, config.auto_backup_dir())
         except Exception as e:  # noqa: BLE001
-            _excepthook(type(e), e, e.__traceback__)
+            if told["backup_failed"]:
+                _log(e)  # already told once: a full disk must not pop up every hour
+            else:
+                told["backup_failed"] = True
+                _excepthook(type(e), e, e.__traceback__)
     backup_timer = QtCore.QTimer()
     backup_timer.timeout.connect(hourly_backup)
     backup_timer.start(60 * 60 * 1000)

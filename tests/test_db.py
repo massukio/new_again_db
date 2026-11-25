@@ -321,3 +321,32 @@ def test_services_seeded_once_and_on_upgrade(tmp_path):
     d = Database(str(p))
     assert len(d.list_services()) == 16                 # not re-seeded on the next start
     d.close()
+
+
+def test_uri_path_handles_network_paths():
+    from app.db import _uri_path
+    assert _uri_path("//NAS/share/x.db").startswith("////NAS/share/")  # file:////NAS/... (no URI authority)
+    assert not _uri_path("/tmp/a b.db").startswith("//")
+
+
+def test_rotation_with_glob_chars_in_folder(db, tmp_path):
+    folder = tmp_path / "[洗車] 資料"  # [ ] are glob patterns and valid on Windows
+    folder.mkdir()
+    for i in range(5):
+        (folder / f"{config.AUTO_BACKUP_PREFIX}2025010{i}.db").write_bytes(b"")
+    backup.daily_auto_backup(db, str(folder), keep=3)
+    assert len(os.listdir(folder)) == 3
+
+
+def test_bad_backup_copy_never_replaces_a_good_one(db, tmp_path, monkeypatch):
+    dest = tmp_path / "備份.db"
+    db.backup_to(str(dest))
+    good = dest.read_bytes()
+
+    def broken(_path):
+        raise DataError("備份檔已損壞，無法還原。")
+    monkeypatch.setattr(Database, "check_backup_file", staticmethod(broken))
+    with pytest.raises(DataError):
+        db.backup_to(str(dest))
+    assert dest.read_bytes() == good
+    assert not os.path.exists(str(dest) + ".tmp")

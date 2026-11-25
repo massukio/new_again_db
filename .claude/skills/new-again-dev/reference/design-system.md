@@ -65,3 +65,18 @@ pretends the screen is 800×600, so dialogs look cramped in screenshots only).
   Enter to save handle it in `keyPressEvent`; message boxes default to the safe button.
 - Test it: `tests/test_ui.py` style tests click, press Enter/ESC and assert the
   visible state, not only the data.
+
+## 使用說明 (in-app manual) — keep it true
+
+- Header right: 「？ 使用說明」 (`role="help"`, amber pill) and F1 open `app/ui/manual.py`
+  at the chapter of the current page (`MainWindow.MANUAL_ANCHORS` ↔ `<a name>` in
+  `assets/manual/manual.html`). The header hides the program name (icon stays)
+  when it has no room (`_fit_header`), so no tab or the help button is ever cut off.
+- Any change to a screen, a button text or a flow: update the chapter in
+  `manual.html` and regenerate the pictures with `tools/make_manual.py` ON WINDOWS
+  (`workflows/build-release.md`), then look at every picture. `test_manual_is_complete`
+  checks pictures/links/anchors, not wording — re-read the text yourself.
+- Writing style (owner request): spoken Taiwanese Mandarin for an elderly shop
+  owner, 「您」, short sentences, steps ①②③ matching the orange numbers in the
+  pictures, 小提醒 / 注意 boxes, a 常見問題 chapter, 「回到目錄」 after every chapter.
+  No machine-translation tone, no English, no emoji (Qt on Windows shows boxes).

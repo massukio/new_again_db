@@ -62,8 +62,18 @@ def _upper(w: QtWidgets.QLineEdit, text: str):
         w.setCursorPosition(pos)
 
 
+class PhoneEdit(QtWidgets.QLineEdit):
+    """Never narrower than a whole phone number: a hidden first digit reads as a wrong number."""
+
+    def minimumSizeHint(self):
+        s = super().minimumSizeHint()
+        fm = self.fontMetrics()
+        need = fm.horizontalAdvance("0" * config.PHONE_MAX) + fm.height() + 24  # + padding and frame
+        return QtCore.QSize(max(s.width(), need), s.height())
+
+
 def phone_edit(placeholder: str = "電話號碼") -> QtWidgets.QLineEdit:
-    e = QtWidgets.QLineEdit()
+    e = PhoneEdit()
     e.setPlaceholderText(placeholder)
     e.setValidator(QtGui.QRegExpValidator(PHONE_RE, e))
     e.setMaxLength(config.PHONE_MAX)
@@ -463,11 +473,16 @@ class CustomersPage(QtWidgets.QWidget):
         return bool(self.part1.text() or self.part2.text() or self.phone.text())
 
     # ----------------------------------------------------------------- list
+    def invalidate(self):
+        """Make the next refresh reload even if nothing seems changed (e.g. after a restore)."""
+        self.__dict__.pop("_loaded_key", None)
+
     def refresh(self, select_id: Optional[int] = None, auto_pick: bool = False, force: bool = True):
         """Reload the list. force=False (tab switches) skips it when neither the
         search nor the data changed since the last load."""
         self._timer.stop()
-        key = (self.mode, self.part1.text(), self.part2.text(), self.phone.text(), self.db.conn.total_changes)
+        key = (self.mode, self.part1.text(), self.part2.text(), self.phone.text(),
+               _dt.date.today(), self.db.conn.total_changes)  # a new day changes 「N天前」
         if not force and key == getattr(self, "_loaded_key", None):
             return
         if key[-1] != getattr(self, "_loaded_key", (None,))[-1]:
@@ -524,7 +539,7 @@ class CustomersPage(QtWidgets.QWidget):
     # --------------------------------------------------------------- actions
     def _charged(self, customer: dict, amount: int):
         self.refresh(select_id=customer["id"])
-        self.toast.show_text(f"✓ {customer['plate']} 已記錄 {fmt_money(amount)}")
+        self.toast.show_text(f"✓ {customer['plate']} 已記錄")  # no money on the main screen
         self.data_changed.emit()
         self.focus_search()
 
@@ -871,7 +886,9 @@ class CustomerDialog(QtWidgets.QDialog):
         if event.key() in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
             focus = self.focusWidget()
             order = [self.part1, self.part2, self.phone, self.note]
-            if focus in order[:-1]:
+            if isinstance(focus, QtWidgets.QAbstractButton):
+                focus.click()  # Enter on a focused 取消 / brand chip does what that button does
+            elif focus in order[:-1]:
                 order[order.index(focus) + 1].setFocus()
             else:
                 self.save()

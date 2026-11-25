@@ -255,7 +255,11 @@ class BackupPage(Page):
         if not path:
             return
         if not path.lower().endswith(".db"):
-            path += ".db"
+            path += ".db"  # the save dialog's overwrite question did not see this name
+            if os.path.exists(path) and not ask(
+                    self, f"這個位置已經有同名的備份檔：\n{path}\n\n要用新的備份取代它嗎？",
+                    "取代備份檔", yes="取代", no="不要取代"):
+                return
         try:
             self.db.backup_to(path)
             Database.check_backup_file(path)
@@ -287,9 +291,22 @@ class BackupPage(Page):
             return
         try:
             safety = backup.safety_backup_before_restore(self.db, config.auto_backup_dir())
+        except (OSError, DataError) as e:
+            warn(self, f"還原失敗！目前的資料沒有被改變。\n\n{e}")
+            return
+        try:
             self.db.restore_from(path)
         except (OSError, DataError) as e:
-            warn(self, f"還原失敗！\n\n{e}")
+            # the copy may have stopped half way (e.g. an old backup that could
+            # not be upgraded): put the data from just before back
+            try:
+                self.db.restore_from(safety)
+                back = "目前的資料已經恢復成還原前的樣子。"
+            except (OSError, DataError):
+                back = f"請關閉程式再重新打開。還原前的資料存在：\n{safety}"
+            self.refresh()
+            self.restored.emit()
+            warn(self, f"還原失敗！{back}\n\n{e}")
             return
         self.refresh()
         self.restored.emit()

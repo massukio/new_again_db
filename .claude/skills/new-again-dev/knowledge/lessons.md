@@ -83,3 +83,47 @@ Format: `## YYYY-MM-DD — title` then What happened / Cause / Rule.
   `refs/heads/*` with --force; verify from a fresh clone; never touch the owner's
   working clone with uncommitted work. `.gitignore` already excludes *.db.
 - Branch names: `x/y` cannot coexist with a branch named `x`.
+
+## 2026-11-24 — 2.0.1 pre-release review (two independent reviewers + sister-app findings)
+- Restore: ids in the restored data can mean other cars. The charge panel kept the
+  typed amount/chips/note and the reselected row could be another plate → 儲存消費
+  could charge the wrong car. Rule: after a restore, `invalidate()` the list, clear
+  the selection and `charge.set_customer(None)`; never rely on `total_changes`.
+- The "skip unchanged refresh" key must include today's date (「N天前」 changes at
+  midnight while the data does not).
+- `backup_to` checks the new copy BEFORE `os.replace`: a bad copy must never replace
+  an older good backup. An hourly auto-backup failure is shown once, then logged.
+- Ported from autorepair_db: UNC paths in sqlite URIs (`file:////server/...`),
+  `glob.escape` in rotation, restore failing half way puts the safety copy back,
+  overwrite question when `.db` is appended, message if no data folder.
+- Enter on a focused button in 新增/修改資料 now presses that button (取消 used to save).
+- The save toast showed money on the main screen (owner rule) — removed.
+- `.gitignore` had `*.db` with no exception, so the legacy `.db` fixtures were never
+  committed (fresh clones and the Windows build failed `test_legacy_backups`), and
+  `.pytest_cache/再新洗車資料/` was one line, so neither was ignored. Fixed; don't
+  exclude `*.db` when uploading the source tree for a build.
+
+## 2026-11-25 — 使用說明 (in-app manual) for both apps
+- Owner asked for a Chinese manual with a table of contents, Taiwanese spoken
+  style and highlighted screenshots, packed into the program. Built as
+  `app/ui/manual.py` + `assets/manual/` + `tools/make_manual.py` (same in both apps).
+- Making the screenshots found real UI bugs: the new header button squeezed the
+  program name (now hidden only when there is no room, tabs slightly tighter);
+  in 修改資料 the phone box got narrower than a phone number (the hint
+  label shares the row) and hid the first digit → `PhoneEdit` minimum width from font metrics.
+- Highlight boxes must only cover what is visible: clip to the window and to
+  every scroll-area viewport on the way (`rect_of`), or boxes point at nothing.
+- The first Windows build failed in a test: `ItemGrid.changeEvent` used
+  `QTimer.singleShot(0, lambda ...)`; if the window was deleted before it fired,
+  it touched deleted chips (RuntimeError). Rule: a deferred call on a widget uses a
+  QTimer OWNED by that widget (dies with it), never a bare lambda singleShot.
+  A "1 passed, 1 error" seen once on the Mac was this same flaky crash, not tooling noise
+  — never wave off an intermittent error; reproduce it (`sip.delete` the parent).
+- Tests that depend on the real font size must call `apply_font_size()` after
+  resizing: the window's resize timer has not run yet in a test.
+
+## 2026-11-25 — Release zip layout
+- Owner: each zip must be one folder holding the exe and the manual html only. The
+  hand-made zips held a bare exe, and old zips sat next to new ones in dist/ and in the
+  VM test folders, which looked like "a zip inside the zip". Rule: the build makes the
+  zip (`tools/make_release.py`), and check the zip's contents before reporting.

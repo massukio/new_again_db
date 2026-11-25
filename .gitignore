@@ -3,11 +3,14 @@ __pycache__/
 *.pyc
 *.log
 *.db
+# tiny synthetic backups made by each old app version (tools/make_legacy_backups.py)
+!tests/fixtures/legacy/*.db
 designer/
 dist/
 build/
 logs/
-.pytest_cache/再新洗車資料/
+.pytest_cache/
+再新洗車資料/
 *.lock
 assets/app.ico
 assets/app.png
